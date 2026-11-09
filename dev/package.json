@@ -1,0 +1,14 @@
+{
+  "name": "praktikumsportal-dev",
+  "private": true,
+  "description": "Lokale Entwicklungs- und Testumgebung für das Praktikumsportal (nicht für GitHub Pages nötig)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node e2e.mjs"
+  },
+  "dependencies": {
+    "pdf-lib": "1.17.1",
+    "pg": "8.13.1"
+  }
+}

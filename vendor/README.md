@@ -1,0 +1,31 @@
+# Eingebundene Bibliotheken
+
+Die Bibliotheken liegen lokal im Repository (kein CDN), damit beim Erzeugen der PDF
+keine Daten oder IP-Adressen an Dritte übertragen werden.
+
+| Datei | Paket | Lizenz |
+| --- | --- | --- |
+| `pdf-lib.min.js` | [pdf-lib](https://github.com/Hopding/pdf-lib) 1.17.1 (npm, `dist/pdf-lib.min.js`) | MIT, siehe `pdf-lib.LICENSE.md` |
+| `fontkit.umd.min.js` | [@pdf-lib/fontkit](https://github.com/Hopding/fontkit) 1.1.1 (npm, `dist/fontkit.umd.min.js`) | MIT (laut `package.json` des Pakets; Autor Andrew Dillon, Fork von fontkit von Devon Govett) |
+
+Der Verweis auf die Source-Map wurde aus `pdf-lib.min.js` entfernt, da die Map nicht mitgeliefert wird.
+
+## MIT License (Text)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
