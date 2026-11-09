@@ -9,8 +9,8 @@
 // ---------------------------------------------------------------------
 export const CONFIG = {
   // Projekt-URL, z. B. 'https://abcdefghijklmnop.supabase.co'
-  supabaseUrl: '',
+  supabaseUrl: 'https://ybwpfcbvdlaelqucslud.supabase.co',
   // "Publishable key" (beginnt mit sb_publishable_) oder der ältere "anon public"-Schlüssel
-  supabaseKey: '',
+  supabaseKey: 'sb_publishable_P4Vl2b_qWPU9pR4uAP7WVg_WIn4OekB',
   schoolName: 'Georg-Christoph-Lichtenberg-Schule Kassel',
 };
