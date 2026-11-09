@@ -3,17 +3,19 @@
 import { rpc, store, KEYS } from './api.js';
 import {
   html, raw, render, $, $$, submitting, formValues, toast, go, download, richText, fmt, setHeader, busy,
+  band, etikett, navToken, isStale,
 } from './ui.js';
 import {
-  TEXTS, STECKBRIEF_FIELDS, missingData, parseKuerzel, gradeLabel, appointmentEnd,
+  TEXTS, STECKBRIEF_FIELDS, LODGING_FIELDS, missingData, parseKuerzel, gradeLabel, appointmentEnd, coverHex,
 } from './common.js';
+import { icon } from './icons.js';
 import { buildIcs, studentEvent } from './ics.js';
 
 const token = () => store.get(KEYS.student);
 
-function logoutButton() {
-  return html`<a class="btn btn--ghost btn--small" href="#/konto">Konto</a>
-    <button type="button" class="btn btn--ghost btn--small" id="student-logout">Abmelden</button>`;
+function accountActions() {
+  return html`<a class="btn btn--band btn--small" href="#/konto">${icon('user', { size: 16 })}<span>Konto</span></a>
+    <button type="button" class="btn btn--band btn--small" id="student-logout">${icon('logout', { size: 16 })}<span>Abmelden</span></button>`;
 }
 function bindLogout() {
   const b = document.getElementById('student-logout');
@@ -38,6 +40,11 @@ function bindPasswordConfirm(form) {
   });
 }
 
+// Seite mit Band und einem Formular-Blatt, das in das Band hineinragt
+const authPage = (title, sub, body) => html`
+  ${band({ title, sub, lift: true })}
+  <div class="wrap page-body page-body--lift"><div class="narrow">${body}</div></div>`;
+
 // ---------------------------------------------------------------------
 //  Routing
 // ---------------------------------------------------------------------
@@ -49,12 +56,19 @@ export async function studentRoute(main, path, query) {
     if (path === '/code-login') return renderCodeLogin(main);
     return renderLogin(main);
   }
+  const tok = navToken();
   const state = await rpc('student_get_state', { p_token: token() });
+  if (isStale(tok)) return;
   if (state.must_change_password) {
     setHeader({ area: 'Schüleransicht', user: state.student.first_name });
     return renderSetNewPassword(main, state);
   }
-  setHeader({ area: 'Schüleransicht', user: `${state.student.first_name} ${state.student.last_name}`, actions: logoutButton() });
+  setHeader({
+    area: 'Schüleransicht',
+    user: `${state.student.first_name} ${state.student.last_name}`,
+    actions: accountActions(),
+    cover: state.class ? coverHex(state.class) : undefined,
+  });
   bindLogout();
   if (!state.class) return renderJoin(main, state);
   switch (path) {
@@ -69,30 +83,24 @@ export async function studentRoute(main, path, query) {
 //  Anmelden / Registrieren / Passwort vergessen
 // ---------------------------------------------------------------------
 function renderLogin(main) {
-  render(main, html`
-    <section class="narrow">
-      <div class="card">
-        <h1>Anmelden</h1>
-        <p class="muted">Melde dich mit deiner schulischen E-Mail-Adresse an.</p>
-        <form id="login-form" class="form" novalidate>
-          <label class="field"><span>Schulische E-Mail-Adresse</span>
-            <input type="email" name="email" autocomplete="username" required></label>
-          <label class="field"><span>Passwort</span>
-            <input type="password" name="password" autocomplete="current-password" required></label>
-          <p class="form-error" hidden></p>
-          <button type="submit" class="btn btn--primary btn--block">Anmelden</button>
-        </form>
-        <div class="auth-links">
-          <a href="#/passwort-vergessen">Passwort vergessen?</a>
-          <a href="#/code-login">Ich habe einen Einmal-Code</a>
-        </div>
+  render(main, authPage('Anmelden', 'Mit deiner schulischen E-Mail-Adresse und deinem Passwort.', html`
+    <form id="login-form" class="sheet form" novalidate>
+      <label class="field"><span>Schulische E-Mail-Adresse</span>
+        <input type="email" name="email" autocomplete="username" required></label>
+      <label class="field"><span>Passwort</span>
+        <input type="password" name="password" autocomplete="current-password" required></label>
+      <p class="form-error" hidden></p>
+      <button type="submit" class="btn btn--primary btn--block">Anmelden</button>
+      <div class="auth-links">
+        <a href="#/passwort-vergessen">Passwort vergessen?</a>
+        <a href="#/code-login">Ich habe einen Einmal-Code</a>
       </div>
-      <div class="card card--soft">
-        <h2>Noch kein Konto?</h2>
-        <p>Registriere dich einmalig, um deine Praktikumsdaten einzutragen.</p>
-        <a class="btn btn--block" href="#/registrieren">Jetzt registrieren</a>
-      </div>
-    </section>`);
+    </form>
+    <div class="sheet sheet--quiet">
+      <h2 class="sheet__title">Noch kein Konto?</h2>
+      <p>Registriere dich einmalig, um deine Praktikumsdaten einzutragen.</p>
+      <a class="btn btn--block" href="#/registrieren">Jetzt registrieren ${icon('arrowRight')}</a>
+    </div>`));
   const form = $('#login-form');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -106,31 +114,25 @@ function renderLogin(main) {
 }
 
 function renderRegister(main) {
-  render(main, html`
-    <section class="narrow">
-      <div class="card">
-        <h1>Registrieren</h1>
-        <p class="muted">Lege dein Konto für das Praktikumsportal an.</p>
-        <form id="register-form" class="form" novalidate>
-          <div class="grid-2">
-            <label class="field"><span>Vorname</span>
-              <input name="first_name" autocomplete="given-name" required maxlength="80"></label>
-            <label class="field"><span>Nachname</span>
-              <input name="last_name" autocomplete="family-name" required maxlength="80"></label>
-          </div>
-          <label class="field"><span>Schulische E-Mail-Adresse</span>
-            <input type="email" name="email" autocomplete="email" required maxlength="200"></label>
-          <label class="field"><span>Passwort <small>(mindestens 8 Zeichen)</small></span>
-            <input type="password" name="password" autocomplete="new-password" required minlength="8" maxlength="72"></label>
-          <label class="field"><span>Passwort wiederholen</span>
-            <input type="password" name="password2" autocomplete="new-password" required></label>
-          <p class="hint">Dein Passwort wird nur verschlüsselt (als nicht umkehrbarer Hash) gespeichert. Auch deine Lehrkraft kann es nicht sehen.</p>
-          <p class="form-error" hidden></p>
-          <button type="submit" class="btn btn--primary btn--block">Konto anlegen</button>
-        </form>
-        <div class="auth-links"><a href="#/">Ich habe schon ein Konto</a></div>
+  render(main, authPage('Registrieren', 'Lege dein Konto für das Praktikumsportal an.', html`
+    <form id="register-form" class="sheet form" novalidate>
+      <div class="grid-2">
+        <label class="field"><span>Vorname</span>
+          <input name="first_name" autocomplete="given-name" required maxlength="80"></label>
+        <label class="field"><span>Nachname</span>
+          <input name="last_name" autocomplete="family-name" required maxlength="80"></label>
       </div>
-    </section>`);
+      <label class="field"><span>Schulische E-Mail-Adresse</span>
+        <input type="email" name="email" autocomplete="email" required maxlength="200"></label>
+      <label class="field"><span>Passwort <small>(mindestens 8 Zeichen)</small></span>
+        <input type="password" name="password" autocomplete="new-password" required minlength="8" maxlength="72"></label>
+      <label class="field"><span>Passwort wiederholen</span>
+        <input type="password" name="password2" autocomplete="new-password" required></label>
+      <p class="hint">Dein Passwort wird nur verschlüsselt (als nicht umkehrbarer Hash) gespeichert. Auch deine Lehrkraft kann es nicht sehen.</p>
+      <p class="form-error" hidden></p>
+      <button type="submit" class="btn btn--primary btn--block">Konto anlegen</button>
+      <div class="auth-links"><a href="#/">Ich habe schon ein Konto</a></div>
+    </form>`));
   const form = $('#register-form');
   bindPasswordConfirm(form);
   form.addEventListener('submit', (e) => {
@@ -149,23 +151,19 @@ function renderRegister(main) {
 }
 
 function renderForgot(main) {
-  render(main, html`
-    <section class="narrow">
-      <div class="card" id="forgot-card">
-        <h1>Passwort vergessen</h1>
-        <p>Deine Lehrkraft erhält eine Anfrage und kann dir einen <strong>Einmal-Code</strong> erzeugen.
-          Mit diesem Code kannst du dich einmalig anmelden (bis zu zwei Stunden nach dem Erzeugen) und legst dabei ein neues Passwort fest.</p>
-        <form id="forgot-form" class="form" novalidate>
-          <label class="field"><span>Schulische E-Mail-Adresse</span>
-            <input type="email" name="email" autocomplete="username" required></label>
-          <label class="field"><span>Klassencode <small>(nur nötig, falls du noch keiner Klasse beigetreten bist)</small></span>
-            <input name="code" autocomplete="off" class="input-code" maxlength="10"></label>
-          <p class="form-error" hidden></p>
-          <button type="submit" class="btn btn--primary btn--block">Anfrage an meine Lehrkraft senden</button>
-        </form>
-        <div class="auth-links"><a href="#/">Zurück zur Anmeldung</a><a href="#/code-login">Ich habe schon einen Einmal-Code</a></div>
-      </div>
-    </section>`);
+  render(main, authPage('Passwort vergessen', 'Deine Lehrkraft erzeugt dir einen Einmal-Code für ein neues Passwort.', html`
+    <div class="sheet" id="forgot-card">
+      <p>Mit dem <strong>Einmal-Code</strong> kannst du dich einmalig anmelden (bis zu zwei Stunden nach dem Erzeugen) und legst dabei ein neues Passwort fest.</p>
+      <form id="forgot-form" class="form" novalidate>
+        <label class="field"><span>Schulische E-Mail-Adresse</span>
+          <input type="email" name="email" autocomplete="username" required></label>
+        <label class="field"><span>Klassencode <small>(nur nötig, falls du noch keiner Klasse beigetreten bist)</small></span>
+          <input name="code" autocomplete="off" class="input-code" maxlength="10"></label>
+        <p class="form-error" hidden></p>
+        <button type="submit" class="btn btn--primary btn--block">Anfrage an meine Lehrkraft senden</button>
+      </form>
+      <div class="auth-links"><a href="#/">Zurück zur Anmeldung</a><a href="#/code-login">Ich habe schon einen Einmal-Code</a></div>
+    </div>`));
   const form = $('#forgot-form');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -174,34 +172,26 @@ function renderForgot(main) {
       if (!v.email.trim()) throw new Error('Bitte gib deine E-Mail-Adresse an.');
       await rpc('student_request_reset', { p_site_password: store.get(KEYS.site), p_email: v.email, p_class_code: v.code });
       render($('#forgot-card'), html`
-        <h1>Anfrage gesendet</h1>
-        <div class="notice notice--ok">
-          <p>Falls ein Konto mit dieser E-Mail-Adresse existiert, wurde deine Anfrage an deine Lehrkraft weitergeleitet.</p>
-        </div>
+        <h2 class="sheet__title">Anfrage gesendet</h2>
+        <div class="note note--ok">${icon('check')}<p>Falls ein Konto mit dieser E-Mail-Adresse existiert, wurde deine Anfrage an deine Lehrkraft weitergeleitet.</p></div>
         <p>Sobald deine Lehrkraft dir einen Einmal-Code gibt, kannst du dich damit anmelden.
           Der Code ist nach dem Erzeugen <strong>zwei Stunden</strong> gültig und funktioniert nur <strong>einmal</strong>.</p>
-        <a class="btn btn--primary btn--block" href="#/code-login">Mit Einmal-Code anmelden</a>`);
+        <a class="btn btn--primary btn--block" href="#/code-login">Mit Einmal-Code anmelden ${icon('arrowRight')}</a>`);
     });
   });
 }
 
 function renderCodeLogin(main) {
-  render(main, html`
-    <section class="narrow">
-      <div class="card">
-        <h1>Mit Einmal-Code anmelden</h1>
-        <p class="muted">Den Code hat dir deine Lehrkraft gegeben. Danach legst du sofort ein neues Passwort fest.</p>
-        <form id="code-form" class="form" novalidate>
-          <label class="field"><span>Schulische E-Mail-Adresse</span>
-            <input type="email" name="email" autocomplete="username" required></label>
-          <label class="field"><span>Einmal-Code</span>
-            <input name="code" autocomplete="one-time-code" class="input-code" required maxlength="12" placeholder="XXXX-XXXX"></label>
-          <p class="form-error" hidden></p>
-          <button type="submit" class="btn btn--primary btn--block">Anmelden</button>
-        </form>
-        <div class="auth-links"><a href="#/">Zurück zur Anmeldung</a></div>
-      </div>
-    </section>`);
+  render(main, authPage('Mit Einmal-Code anmelden', 'Den Code hat dir deine Lehrkraft gegeben. Danach legst du sofort ein neues Passwort fest.', html`
+    <form id="code-form" class="sheet form" novalidate>
+      <label class="field"><span>Schulische E-Mail-Adresse</span>
+        <input type="email" name="email" autocomplete="username" required></label>
+      <label class="field"><span>Einmal-Code</span>
+        <input name="code" autocomplete="one-time-code" class="input-code input-code--large" required maxlength="12" placeholder="XXXX-XXXX"></label>
+      <p class="form-error" hidden></p>
+      <button type="submit" class="btn btn--primary btn--block">Anmelden</button>
+      <div class="auth-links"><a href="#/">Zurück zur Anmeldung</a></div>
+    </form>`));
   const form = $('#code-form');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -215,21 +205,15 @@ function renderCodeLogin(main) {
 }
 
 function renderSetNewPassword(main, state) {
-  render(main, html`
-    <section class="narrow">
-      <div class="card">
-        <h1>Neues Passwort festlegen</h1>
-        <p>Hallo ${state.student.first_name}, du hast dich mit einem Einmal-Code angemeldet. Bitte lege jetzt ein neues Passwort fest.</p>
-        <form id="newpw-form" class="form" novalidate>
-          <label class="field"><span>Neues Passwort <small>(mindestens 8 Zeichen)</small></span>
-            <input type="password" name="password" autocomplete="new-password" required minlength="8" maxlength="72"></label>
-          <label class="field"><span>Neues Passwort wiederholen</span>
-            <input type="password" name="password2" autocomplete="new-password" required></label>
-          <p class="form-error" hidden></p>
-          <button type="submit" class="btn btn--primary btn--block">Passwort speichern</button>
-        </form>
-      </div>
-    </section>`);
+  render(main, authPage('Neues Passwort festlegen', `Hallo ${state.student.first_name}, du hast dich mit einem Einmal-Code angemeldet.`, html`
+    <form id="newpw-form" class="sheet form" novalidate>
+      <label class="field"><span>Neues Passwort <small>(mindestens 8 Zeichen)</small></span>
+        <input type="password" name="password" autocomplete="new-password" required minlength="8" maxlength="72"></label>
+      <label class="field"><span>Neues Passwort wiederholen</span>
+        <input type="password" name="password2" autocomplete="new-password" required></label>
+      <p class="form-error" hidden></p>
+      <button type="submit" class="btn btn--primary btn--block">Passwort speichern</button>
+    </form>`));
   const form = $('#newpw-form');
   bindPasswordConfirm(form);
   form.addEventListener('submit', (e) => {
@@ -246,18 +230,18 @@ function renderSetNewPassword(main, state) {
 
 function renderAccount(main, state) {
   render(main, html`
-    <section class="narrow">
-      <p class="breadcrumb"><a href="#/">← Zum Praktikums-Dashboard</a></p>
-      <div class="card">
-        <h1>Mein Konto</h1>
+    ${band({ crumbs: html`<a href="#/">${icon('arrowLeft', { size: 16 })} Praktikums-Dashboard</a>`, title: 'Mein Konto' })}
+    <div class="wrap page-body"><div class="narrow stack-lg">
+      <section class="sheet">
+        <h2 class="sheet__title">Kontodaten</h2>
         <dl class="data-list">
           <dt>Name</dt><dd>${state.student.first_name} ${state.student.last_name}</dd>
           <dt>E-Mail</dt><dd>${state.student.email}</dd>
           <dt>Klasse</dt><dd>${state.class.name} (${gradeLabel(state.class.grade)})</dd>
         </dl>
-      </div>
-      <div class="card">
-        <h2>Passwort ändern</h2>
+      </section>
+      <section class="sheet">
+        <h2 class="sheet__title">Passwort ändern</h2>
         <form id="pw-form" class="form" novalidate>
           <label class="field"><span>Bisheriges Passwort</span>
             <input type="password" name="old" autocomplete="current-password" required></label>
@@ -266,10 +250,10 @@ function renderAccount(main, state) {
           <label class="field"><span>Neues Passwort wiederholen</span>
             <input type="password" name="password2" autocomplete="new-password" required></label>
           <p class="form-error" hidden></p>
-          <button type="submit" class="btn btn--primary">Passwort ändern</button>
+          <div class="form-actions"><button type="submit" class="btn btn--primary">Passwort ändern</button></div>
         </form>
-      </div>
-    </section>`);
+      </section>
+    </div></div>`);
   const form = $('#pw-form');
   bindPasswordConfirm(form);
   form.addEventListener('submit', (e) => {
@@ -287,21 +271,13 @@ function renderAccount(main, state) {
 //  Klasse beitreten
 // ---------------------------------------------------------------------
 function renderJoin(main, state) {
-  render(main, html`
-    <section class="narrow">
-      <div class="card">
-        <p class="eyebrow">Willkommen, ${state.student.first_name}!</p>
-        <h1>Deiner Klasse beitreten</h1>
-        <p>Gib den Code ein, den du von deiner Lehrkraft für Politik und Wirtschaft bekommen hast.
-          Danach wirst du deinem Kurs zugeordnet.</p>
-        <form id="join-form" class="form" novalidate>
-          <label class="field"><span>Klassencode</span>
-            <input name="code" class="input-code input-code--large" autocomplete="off" required maxlength="10" placeholder="z. B. K7M2PX" autofocus></label>
-          <p class="form-error" hidden></p>
-          <button type="submit" class="btn btn--primary btn--block">Beitreten</button>
-        </form>
-      </div>
-    </section>`);
+  render(main, authPage('Deiner Klasse beitreten', `Willkommen, ${state.student.first_name}! Gib den Code ein, den du von deiner Lehrkraft für Politik und Wirtschaft bekommen hast.`, html`
+    <form id="join-form" class="sheet form" novalidate>
+      <label class="field"><span>Klassencode</span>
+        <input name="code" class="input-code input-code--large" autocomplete="off" required maxlength="10" placeholder="z. B. K7M2PX" autofocus></label>
+      <p class="form-error" hidden></p>
+      <button type="submit" class="btn btn--primary btn--block">Beitreten</button>
+    </form>`));
   const form = $('#join-form');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -319,9 +295,11 @@ function renderJoin(main, state) {
 //  Betriebssteckbrief + Unterkunft
 // ---------------------------------------------------------------------
 function stepper(step) {
+  const item = (n, label) => html`<li class="${step === n ? 'is-current' : step > n ? 'is-done' : ''}">
+    <span class="stepper__dot">${step > n ? icon('check', { size: 14 }) : n}</span>${label}</li>`;
   return html`<ol class="stepper" aria-label="Fortschritt">
-    <li class="${step === 1 ? 'is-current' : 'is-done'}">Betriebssteckbrief &amp; Unterkunft</li>
-    <li class="${step === 2 ? 'is-current' : ''}">Klassenteam</li>
+    ${item(1, 'Betriebssteckbrief & Unterkunft')}
+    ${item(2, 'Klassenteam')}
   </ol>`;
 }
 
@@ -331,13 +309,15 @@ function renderSteckbrief(main, state, query) {
   const v = (k) => s[k] ?? '';
   const km = s.distance_km === null || s.distance_km === undefined ? '' : String(s.distance_km).replace('.', ',');
   render(main, html`
-    <section class="narrow narrow--wide">
-      ${onboarding ? stepper(1) : html`<p class="breadcrumb"><a href="#/">← Zum Praktikums-Dashboard</a></p>`}
-      <form id="steckbrief-form" class="form" novalidate>
-        <div class="card">
-          <h1>Betriebssteckbrief</h1>
-          <p class="muted">Trage die Angaben zu deinem Praktikum ein. Du kannst auch erst einen Teil ausfüllen und den Rest später ergänzen.
-            Gemeint ist immer der <strong>Standort, an dem du dein Praktikum machst</strong>.</p>
+    ${band({
+      crumbs: onboarding ? stepper(1) : html`<a href="#/">${icon('arrowLeft', { size: 16 })} Praktikums-Dashboard</a>`,
+      title: 'Betriebssteckbrief',
+      sub: 'Gemeint ist immer der Standort, an dem du dein Praktikum machst. Du kannst auch erst einen Teil ausfüllen und den Rest später ergänzen.',
+    })}
+    <div class="wrap page-body">
+      <form id="steckbrief-form" class="form narrow narrow--wide stack-lg" novalidate>
+        <section class="sheet form">
+          <h2 class="sheet__title">Praktikumsbetrieb</h2>
           <label class="field"><span>Name des Praktikumsbetriebs</span>
             <input name="company_name" value="${v('company_name')}" maxlength="200" autocomplete="organization"></label>
           <label class="field"><span>Straße und Hausnummer des Praktikumsbetriebs</span>
@@ -349,10 +329,14 @@ function renderSteckbrief(main, state, query) {
               <input name="company_city" value="${v('company_city')}" maxlength="120" autocomplete="off"></label>
           </div>
           <label class="field"><span>Entfernung in Kilometern mit dem Auto zwischen der Georg-Christoph-Lichtenberg-Schule Kassel und dem Praktikumsbetrieb</span>
-            <input name="distance_km" value="${km}" inputmode="decimal" maxlength="8" placeholder="z. B. 12,5" class="input-short">
-            <small class="hint">Tipp: Mit einem Routenplaner (Start: Georg-Christoph-Lichtenberg-Schule, Kassel) ermitteln.</small></label>
+            <span class="input-unit"><input name="distance_km" value="${km}" inputmode="decimal" maxlength="8" placeholder="z. B. 12,5"><span aria-hidden="true">km</span></span>
+            <small class="hint">Tipp: Mit einem Routenplaner ermitteln (Start: Georg-Christoph-Lichtenberg-Schule, Kassel).</small></label>
           <label class="field"><span>Praktikumsberuf</span>
             <input name="job_title" value="${v('job_title')}" maxlength="150"></label>
+        </section>
+
+        <section class="sheet form">
+          <h2 class="sheet__title">Betreuung im Betrieb</h2>
           <label class="field"><span>Zuständige Betreuungsperson im Praktikumsbetrieb</span>
             <input name="supervisor_name" value="${v('supervisor_name')}" maxlength="150"></label>
           <div class="grid-2">
@@ -361,10 +345,10 @@ function renderSteckbrief(main, state, query) {
             <label class="field"><span>Telefonnummer der Betreuungsperson</span>
               <input type="tel" name="supervisor_phone" value="${v('supervisor_phone')}" maxlength="60"></label>
           </div>
-        </div>
+        </section>
 
-        <div class="card" id="unterkunft">
-          <h2>Unterkunft während des Praktikums</h2>
+        <section class="sheet form" id="unterkunft">
+          <h2 class="sheet__title">Unterkunft während des Praktikums</h2>
           <fieldset class="field">
             <legend>Wirst du wegen des Praktikums woanders als an deiner eigenen Adresse wohnen?</legend>
             <div class="choice-row">
@@ -380,15 +364,15 @@ function renderSteckbrief(main, state, query) {
             <label class="field"><span>Unter welchen Kontaktmöglichkeiten ist diese Person im Notfall für deine Lehrkraft erreichbar (bspw. Telefonnummer oder E-Mail-Adresse)?</span>
               <textarea name="lodging_contact" rows="2" maxlength="300">${v('lodging_contact')}</textarea></label>
           </div>
-        </div>
+        </section>
 
         <p class="form-error" hidden></p>
-        <div class="form-actions">
-          <button type="submit" class="btn btn--primary">${onboarding ? 'Speichern und weiter' : 'Speichern'}</button>
+        <div class="form-actions form-actions--sticky">
+          <button type="submit" class="btn btn--primary">${onboarding ? html`Speichern und weiter ${icon('arrowRight')}` : 'Speichern'}</button>
           <a class="btn btn--ghost" href="${onboarding ? '#/klassenteam?start=1' : '#/'}">${onboarding ? 'Später ausfüllen' : 'Abbrechen'}</a>
         </div>
       </form>
-    </section>`);
+    </div>`);
 
   const form = $('#steckbrief-form');
   const lodgingBox = $('#lodging-fields');
@@ -423,28 +407,29 @@ function renderSteckbrief(main, state, query) {
 function renderKlassenteam(main, state, query) {
   const onboarding = query.get('start') === '1';
   render(main, html`
-    <section class="narrow">
-      ${onboarding ? stepper(2) : html`<p class="breadcrumb"><a href="#/">← Zum Praktikums-Dashboard</a></p>`}
-      <form id="team-form" class="card form" novalidate>
-        <h1>Klassenteam</h1>
-        <p>Liste bitte die <strong>Kürzel aller Lehrkräfte</strong> auf, die dich unterrichten.
-          Trenne die Kürzel durch Kommas oder Leerzeichen.</p>
-        <label class="field"><span>Kürzel deiner Lehrkräfte</span>
+    ${band({
+      crumbs: onboarding ? stepper(2) : html`<a href="#/">${icon('arrowLeft', { size: 16 })} Praktikums-Dashboard</a>`,
+      title: 'Klassenteam',
+      sub: 'Liste die Kürzel aller Lehrkräfte auf, die dich unterrichten.',
+    })}
+    <div class="wrap page-body">
+      <form id="team-form" class="sheet form narrow" novalidate>
+        <label class="field"><span>Kürzel deiner Lehrkräfte <small>(getrennt durch Kommas oder Leerzeichen)</small></span>
           <textarea name="class_team" rows="4" maxlength="1000" placeholder="z. B. FEI, MÜL, SCH, KRA">${state.student.class_team ?? ''}</textarea></label>
         <div class="chip-preview" id="kuerzel-preview" aria-live="polite"></div>
         <p class="form-error" hidden></p>
         <div class="form-actions">
-          <button type="submit" class="btn btn--primary">${onboarding ? 'Speichern und zum Dashboard' : 'Speichern'}</button>
+          <button type="submit" class="btn btn--primary">${onboarding ? html`Speichern und zum Dashboard ${icon('arrowRight')}` : 'Speichern'}</button>
           <a class="btn btn--ghost" href="#/">${onboarding ? 'Später ausfüllen' : 'Abbrechen'}</a>
         </div>
       </form>
-    </section>`);
+    </div>`);
   const form = $('#team-form');
   const area = form.querySelector('textarea');
   const preview = () => {
     const items = parseKuerzel(area.value);
     render($('#kuerzel-preview'), items.length
-      ? html`<span class="muted small">Erkannt (${items.length}):</span> ${items.map((k) => html`<span class="chip">${k.original}</span>`)}`
+      ? html`<span class="muted small">Erkannt (${items.length}):</span> ${items.map((k) => html`<span class="chip">${k.key}</span>`)}`
       : '');
   };
   area.addEventListener('input', preview);
@@ -462,20 +447,44 @@ function renderKlassenteam(main, state, query) {
 // ---------------------------------------------------------------------
 //  Praktikums-Dashboard
 // ---------------------------------------------------------------------
-function show(v) {
-  return v === null || v === undefined || String(v).trim() === '' ? html`<span class="missing">fehlt noch</span>` : v;
+const isEmpty = (v) => v === null || v === undefined || String(v).trim() === '';
+const marginMark = () => html`<span class="margin-mark" aria-hidden="true">${icon('alert', { size: 15 })}</span>`;
+
+/** Zeile einer Datenliste; fehlende Werte bekommen die Randmarkierung. */
+function row(label, value, missing = isEmpty(value)) {
+  return html`<dt class="${missing ? 'is-missing' : ''}">${missing ? marginMark() : ''}${label}</dt>
+    <dd>${missing ? html`<span class="missing">fehlt noch</span>` : value}</dd>`;
 }
+
+// Merkt sich, welche Bereiche beim letzten Besuch unvollständig waren –
+// so kann der rote Rand sichtbar verschwinden, sobald alles eingetragen ist.
+const PREV_KEY = 'pk_missing_prev';
+function readPrevMissing() {
+  try { const v = sessionStorage.getItem(PREV_KEY); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+function writePrevMissing(list) {
+  try { sessionStorage.setItem(PREV_KEY, JSON.stringify(list)); } catch { /* egal */ }
+}
+
+function sheetState(section, missingSections, cleared) {
+  if (missingSections.has(section)) return 'sheet--page has-margin';
+  if (cleared.has(section)) return 'sheet--page has-margin margin-clearing';
+  return 'sheet--page';
+}
+const doneBadge = (section, cleared) => (cleared.has(section)
+  ? html`<span class="done-badge">${icon('check', { size: 15 })} vollständig</span>` : '');
 
 function missingNotice(groups) {
   if (!groups.length) return '';
   return html`
-    <div class="notice notice--danger" role="alert">
-      <h2>Es fehlen noch Angaben, die du eintragen solltest</h2>
-      <ul>
+    <section class="sheet has-margin notice--danger" role="alert">
+      <span class="margin-mark margin-mark--head" aria-hidden="true">${icon('alert', { size: 18 })}</span>
+      <h2 class="sheet__title">Es fehlen noch Angaben, die du eintragen solltest</h2>
+      <ul class="missing-list">
         ${groups.map((g) => html`<li><strong>${g.section}:</strong> ${g.fields.join(', ')}
-          – <a href="${g.link}">jetzt eintragen</a></li>`)}
+          <a href="${g.link}" class="missing-list__link">jetzt eintragen ${icon('arrowRight', { size: 15 })}</a></li>`)}
       </ul>
-    </div>`;
+    </section>`;
 }
 
 export function calendarSheet(appt, { kindLabel, teacherName, withIcsButton = false } = {}) {
@@ -499,7 +508,7 @@ export function calendarSheet(appt, { kindLabel, teacherName, withIcsButton = fa
         ${appt.location ? html`<dt>${isUrl ? 'Link' : 'Ort'}</dt><dd>${richText(appt.location)}</dd>` : ''}
         ${appt.note ? html`<dt>Hinweis</dt><dd>${richText(appt.note)}</dd>` : ''}
       </dl>
-      ${withIcsButton ? html`<div class="cal-sheet__actions"><button type="button" class="btn btn--small" id="appt-ics">In meinen Kalender übernehmen (.ics)</button></div>` : ''}
+      ${withIcsButton ? html`<div class="cal-sheet__actions"><button type="button" class="btn btn--small" id="appt-ics">${icon('calendar', { size: 16 })} In meinen Kalender übernehmen (.ics)</button></div>` : ''}
     </div>`;
 }
 
@@ -516,27 +525,33 @@ function mobileBlock(s) {
     </form>`;
 }
 
+function formatLine(kindIcon, label, teacherName) {
+  return html`<p class="visit-format"><span class="tag tag--cover">${icon(kindIcon, { size: 16 })}${label}</span>
+    ${teacherName ? html`<span>durch <strong>${teacherName}</strong></span>` : ''}</p>`;
+}
+
 function visitCard(state) {
   const v = state.visit || { kind: 'none' };
   const s = state.student;
-  let body;
+  let info;
+  let side = '';
   if (v.kind === 'me') {
-    body = html`
-      <p class="visit-format"><span class="badge badge--accent">Praktikumsbesuch in Präsenz</span> durch <strong>${v.teacher_name}</strong></p>
+    info = html`
+      ${formatLine('building', 'Praktikumsbesuch in Präsenz', v.teacher_name)}
       <div class="message-box">${richText(v.message || TEXTS.infoDefault)}</div>
-      ${v.appointment ? calendarSheet(v.appointment, { kindLabel: 'Praktikumsbesuch in Präsenz', teacherName: v.teacher_name, withIcsButton: true }) : ''}
       ${mobileBlock(s)}`;
+    if (v.appointment) side = calendarSheet(v.appointment, { kindLabel: 'Praktikumsbesuch in Präsenz', teacherName: v.teacher_name, withIcsButton: true });
   } else if (v.kind === 'video') {
-    body = html`
-      <p class="visit-format"><span class="badge badge--accent">Praktikumsgespräch per Videocall</span></p>
+    info = html`
+      ${formatLine('video', 'Praktikumsgespräch per Videocall')}
       <p>Du wirst während deines Praktikums durch einen <strong>Videocall</strong> betreut.
         Zuständig ist deine Lehrkraft <strong>${v.teacher_name}</strong>.</p>
-      <div class="message-box">${richText(v.message || TEXTS.infoDefault)}</div>
-      ${v.appointment ? calendarSheet(v.appointment, { kindLabel: 'Praktikumsgespräch per Videocall', teacherName: v.teacher_name, withIcsButton: true }) : ''}`;
+      <div class="message-box">${richText(v.message || TEXTS.infoDefault)}</div>`;
+    if (v.appointment) side = calendarSheet(v.appointment, { kindLabel: 'Praktikumsgespräch per Videocall', teacherName: v.teacher_name, withIcsButton: true });
   } else if (v.kind === 'other') {
-    body = v.teacher_name
+    info = v.teacher_name
       ? html`
-        <p class="visit-format"><span class="badge badge--accent">Praktikumsbesuch in Präsenz</span> durch <strong>${v.teacher_name}</strong></p>
+        ${formatLine('building', 'Praktikumsbesuch in Präsenz', v.teacher_name)}
         <div class="task-box">
           <h3>Deine Aufgabe</h3>
           <p>Melde dich bitte per <strong>E-Mail bei ${v.teacher_name}</strong>. Diese Lehrkraft wurde dir für deinen
@@ -544,76 +559,99 @@ function visitCard(state) {
         </div>
         ${mobileBlock(s)}`
       : html`
-        <p class="visit-format"><span class="badge badge--accent">Praktikumsbesuch in Präsenz</span></p>
+        ${formatLine('building', 'Praktikumsbesuch in Präsenz')}
         <p>Bisher steht nur das Format <strong>„Praktikumsbesuch in Präsenz“</strong> fest.
           Die besuchende Lehrkraft steht noch nicht fest. Schaue bald wieder hier vorbei.</p>
         ${mobileBlock(s)}`;
   } else {
-    body = html`<p>${TEXTS.visitInitial}</p>`;
+    info = html`<p class="lead">${TEXTS.visitInitial}</p>`;
   }
   return html`
-    <section class="card card--wide card--visit" id="praktikumsbesuch">
-      <h2>Praktikumsbesuch / Praktikumsgespräch</h2>
-      ${body}
+    <section class="sheet sheet--page sheet--visit" id="praktikumsbesuch">
+      <h2 class="sheet__title">Praktikumsbesuch / Praktikumsgespräch</h2>
+      <div class="visit ${side ? 'visit--with-sheet' : ''}">
+        <div class="visit__info">${info}</div>
+        ${side ? html`<div class="visit__sheet">${side}</div>` : ''}
+      </div>
     </section>`;
 }
 
 function renderDashboard(main, state) {
   const s = state.student;
   const groups = missingData(s);
+  const missingSections = new Set(groups.map((g) => g.section));
+  const prev = readPrevMissing();
+  const cleared = new Set((prev || []).filter((sec) => !missingSections.has(sec)));
+  writePrevMissing([...missingSections]);
   const t = state.teacher || {};
-  render(main, html`
-    <section class="dashboard">
-      <header class="page-head">
-        <div>
-          <p class="eyebrow">Klasse ${state.class.name} · ${gradeLabel(state.class.grade)}</p>
-          <h1>Praktikums-Dashboard</h1>
-        </div>
-      </header>
+  const lodgingMissing = new Set(LODGING_FIELDS.filter((f) => isEmpty(s[f.key])).map((f) => f.key));
+  const STECK = 'Betriebssteckbrief';
+  const LODGE = 'Unterkunft während des Praktikums';
+  const TEAM = 'Klassenteam';
 
+  render(main, html`
+    ${band({
+      title: 'Praktikums-Dashboard',
+      aside: etikett([
+        ['Name', `${s.first_name} ${s.last_name}`],
+        ['Klasse', `${state.class.name} · ${gradeLabel(state.class.grade)}`],
+        ['Fach', 'Betriebspraktikum'],
+      ]),
+    })}
+    <div class="wrap page-body dashboard">
       ${missingNotice(groups)}
 
-      <div class="dash-grid">
-        <section class="card">
-          <div class="card-head"><h2>Betriebssteckbrief</h2><a class="btn btn--small btn--ghost" href="#/steckbrief">Bearbeiten</a></div>
+      <div class="dash-top">
+        <section class="sheet ${sheetState(STECK, missingSections, cleared)}">
+          <div class="sheet__head"><h2 class="sheet__title">Betriebssteckbrief</h2>${doneBadge(STECK, cleared)}
+            <a class="btn btn--small btn--ghost" href="#/steckbrief">${icon('pencil', { size: 15 })}<span class="btn__label">Bearbeiten</span></a></div>
           <dl class="data-list">
-            <dt>Praktikumsbetrieb</dt><dd>${show(s.company_name)}</dd>
-            <dt>Adresse</dt><dd>${show(s.company_street)}<br>${show([s.company_zip, s.company_city].filter(Boolean).join(' ') || null)}</dd>
-            <dt>Entfernung zur Schule</dt><dd>${show(fmt.km(s.distance_km) || null)}</dd>
-            <dt>Praktikumsberuf</dt><dd>${show(s.job_title)}</dd>
-            <dt>Betreuungsperson</dt><dd>${show(s.supervisor_name)}</dd>
-            <dt>E-Mail</dt><dd>${show(s.supervisor_email)}</dd>
-            <dt>Telefon</dt><dd>${show(s.supervisor_phone)}</dd>
+            ${row('Praktikumsbetrieb', s.company_name)}
+            ${row('Straße, Hausnummer', s.company_street)}
+            ${row('PLZ, Ort', [s.company_zip, s.company_city].filter(Boolean).join(' '), isEmpty(s.company_zip) || isEmpty(s.company_city))}
+            ${row('Entfernung zur Schule', fmt.km(s.distance_km), isEmpty(s.distance_km))}
+            ${row('Praktikumsberuf', s.job_title)}
+            ${row('Betreuungsperson', s.supervisor_name)}
+            ${row('E-Mail', s.supervisor_email)}
+            ${row('Telefon', s.supervisor_phone)}
           </dl>
         </section>
 
-        ${s.lodging_away ? html`
-        <section class="card">
-          <div class="card-head"><h2>Unterkunft während des Praktikums</h2><a class="btn btn--small btn--ghost" href="#/steckbrief?fokus=unterkunft">Bearbeiten</a></div>
-          <dl class="data-list">
-            <dt>Ich wohne bei</dt><dd>${show(s.lodging_name)}</dd>
-            <dt>Verhältnis</dt><dd>${show(s.lodging_relation)}</dd>
-            <dt>Erreichbar im Notfall</dt><dd>${show(s.lodging_contact)}</dd>
-          </dl>
-        </section>` : ''}
+        <div class="dash-aside">
+          ${s.lodging_away ? html`
+          <section class="sheet ${sheetState(LODGE, missingSections, cleared)}">
+            <div class="sheet__head"><h2 class="sheet__title">Unterkunft während des Praktikums</h2>${doneBadge(LODGE, cleared)}
+              <a class="btn btn--small btn--ghost" href="#/steckbrief?fokus=unterkunft">${icon('pencil', { size: 15 })}<span class="btn__label">Bearbeiten</span></a></div>
+            <dl class="data-list">
+              ${row('Ich wohne bei', s.lodging_name, lodgingMissing.has('lodging_name'))}
+              ${row('Verhältnis', s.lodging_relation, lodgingMissing.has('lodging_relation'))}
+              ${row('Erreichbar im Notfall', s.lodging_contact, lodgingMissing.has('lodging_contact'))}
+            </dl>
+          </section>` : ''}
 
-        <section class="card">
-          <div class="card-head"><h2>Klassenteam</h2><a class="btn btn--small btn--ghost" href="#/klassenteam">Bearbeiten</a></div>
-          ${s.class_team
-            ? html`<div class="chip-preview">${parseKuerzel(s.class_team).map((k) => html`<span class="chip">${k.original}</span>`)}</div>`
-            : html`<p><span class="missing">fehlt noch</span></p>`}
-        </section>
+          <section class="sheet ${sheetState(TEAM, missingSections, cleared)}">
+            <div class="sheet__head"><h2 class="sheet__title">Klassenteam</h2>${doneBadge(TEAM, cleared)}
+              <a class="btn btn--small btn--ghost" href="#/klassenteam">${icon('pencil', { size: 15 })}<span class="btn__label">Bearbeiten</span></a></div>
+            ${s.class_team
+              ? html`<div class="chip-preview">${parseKuerzel(s.class_team).map((k) => html`<span class="chip">${k.key}</span>`)}</div>`
+              : html`<p class="is-missing-line">${marginMark()}<span class="missing">fehlt noch</span></p>`}
+          </section>
+        </div>
       </div>
 
       ${visitCard(state)}
 
-      <div class="dash-grid">
-        <section class="card card--sick">
-          <h2>Verfahren bei Krankheit</h2>
-          <p>${TEXTS.sickness}</p>
+      <div class="dash-bottom">
+        <section class="sheet sheet--page card--sick">
+          <h2 class="sheet__title">Verfahren bei Krankheit</h2>
+          <p>${TEXTS.sicknessIntro}</p>
+          <ol class="steps">
+            ${TEXTS.sicknessSteps.map((step, i) => html`<li>${step}${i === 0 && t.contact_email
+              ? html` <a class="steps__action" href="mailto:${t.contact_email}">${icon('mail', { size: 15 })} E-Mail schreiben</a>` : ''}</li>`)}
+          </ol>
         </section>
-        <section class="card card--emergency">
-          <h2>Kontaktinformationen für Notfälle</h2>
+        <section class="sheet sheet--page card--emergency">
+          <h2 class="sheet__title">Kontaktinformationen für Notfälle</h2>
           <dl class="data-list">
             <dt>Name</dt><dd>${t.contact_name || '–'}</dd>
             <dt>E-Mail</dt><dd>${t.contact_email ? html`<a href="mailto:${t.contact_email}">${t.contact_email}</a>` : '–'}</dd>
@@ -621,7 +659,7 @@ function renderDashboard(main, state) {
           </dl>
         </section>
       </div>
-    </section>`);
+    </div>`);
 
   const mobileForm = $('#mobile-form');
   if (mobileForm) {

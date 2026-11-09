@@ -1,5 +1,5 @@
 // Gemeinsame Inhalte und Regeln für Schüler- und Lehrkräfte-Ansicht
-import { raw } from './ui.js';
+import { icon } from './icons.js';
 
 export const TEXTS = {
   visitInitial:
@@ -8,8 +8,15 @@ export const TEXTS = {
     'Hier tauchen bald (spätestens am ersten Praktikumstag) weitere Informationen auf. Bitte schaue häufig vorbei, damit dir keine wichtigen Informationen entgehen.',
   mobileHint:
     'Damit die besuchende Lehrkraft dich erreichen kann, falls sie dich nicht findet, kann es sinnvoll sein, deine private Handynummer hier einzutragen. Das ist freiwillig.',
+  // Inhalt wie vorgegeben, in Du-Form (Entscheidung der koordinierenden Lehrkraft)
   sickness:
-    'Im Krankheitsfall melden Sie sich bitte 1. per E-Mail bei Ihrer bzw. Ihrem PoWi-Lehrer/-in und 2. telefonisch bei Ihrem Arbeitgeber und 3. im Sekretariat der Schule frühzeitig ab.',
+    'Im Krankheitsfall meldest du dich bitte 1. per E-Mail bei deiner PoWi-Lehrerin bzw. deinem PoWi-Lehrer und 2. telefonisch bei deinem Arbeitgeber und 3. im Sekretariat der Schule frühzeitig ab.',
+  sicknessIntro: 'Im Krankheitsfall meldest du dich bitte frühzeitig ab:',
+  sicknessSteps: [
+    'per E-Mail bei deiner PoWi-Lehrerin bzw. deinem PoWi-Lehrer',
+    'telefonisch bei deinem Arbeitgeber',
+    'im Sekretariat der Schule',
+  ],
   pdfColleague:
     'Liebe Kollegin, lieber Kollege, auf den folgenden Seiten dieser PDF-Datei findest du einen Gesprächsleitfaden für den Praktikumsbesuch. Dieser ist keine Pflicht, sondern lediglich eine Hilfestellung für dich, falls du dich gerne dadurch anleiten lassen möchtest. Vielen Dank für deine Unterstützung.',
   pdfMobileNote:
@@ -78,13 +85,28 @@ export const gradeLabel = (g) => (String(g) === '11' ? 'Jg. 11 (E-Phase)' : 'Jg.
 export const fullName = (s) => `${s.first_name} ${s.last_name}`;
 export const sortName = (s) => `${s.last_name}, ${s.first_name}`;
 
-export const suitcaseIcon = (title = 'Wohnt während des Praktikums woanders') => raw(
-  `<svg class="icon-suitcase" viewBox="0 0 24 24" width="18" height="18" role="img" aria-label="${title}"><title>${title}</title>` +
-  '<path d="M9 6V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
-  '<rect x="3.5" y="6" width="17" height="13" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/>' +
-  '<path d="M8 6v13M16 6v13" stroke="currentColor" stroke-width="1.8"/>' +
-  '<circle cx="7" cy="20.5" r="1" fill="currentColor"/><circle cx="17" cy="20.5" r="1" fill="currentColor"/></svg>',
-);
+export const suitcaseIcon = (title = 'Wohnt während des Praktikums woanders') => icon('suitcase', { label: title, cls: 'icon-suitcase' });
+
+// Heftumschlag-Farben der Klassen (geprüft auf Unterscheidbarkeit, auch bei Farbsehschwäche,
+// und auf Kontrast für weiße Schrift). Der Klassenname steht immer dabei – Farbe ist nie die einzige Information.
+export const COVERS = [
+  { name: 'Blau', hex: '#2a5fd0' },
+  { name: 'Grün', hex: '#17804b' },
+  { name: 'Orange', hex: '#c25510' },
+  { name: 'Violett', hex: '#9b2c8f' },
+];
+
+/** Umschlagfarbe einer Klasse (gespeicherte Wahl, sonst stabil aus der ID abgeleitet). */
+export function coverIndex(cls) {
+  if (!cls) return 0;
+  const c = Number(cls.cover);
+  if (Number.isInteger(c) && c >= 0 && c < COVERS.length) return c;
+  const id = String(cls.id || cls.class_id || cls.name || '');
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h % COVERS.length;
+}
+export const coverHex = (cls) => COVERS[coverIndex(cls)].hex;
 
 export const DEFAULT_DURATION_MIN = 45;
 export const appointmentEnd = (a) => (a.end ? new Date(a.end) : new Date(new Date(a.start).getTime() + DEFAULT_DURATION_MIN * 60000));

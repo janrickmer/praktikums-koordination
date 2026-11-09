@@ -1,3 +1,7 @@
 node_modules/
 dev/screenshots/
 .DS_Store
+# Impeccable: Entwurfsvertrag und Prüf-Screenshots nicht veröffentlichen (GitHub Pages liefert alles aus)
+.impeccable/surfaces/
+.impeccable/review/
+.impeccable/*.local.json

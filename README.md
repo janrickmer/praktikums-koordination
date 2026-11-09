@@ -102,7 +102,7 @@ Klassen, Praktikumsbesuche, Videocalls und Termine.
 | Lehrkraft hat Passwort vergessen | SQL Editor: `select app.admin_reset_teacher_password('mail@schule.de', 'NeuesPasswort123');` |
 | Schüler hat Passwort vergessen | „Passwort vergessen“ → Lehrkraft erzeugt Einmal-Code |
 | Daten am Schuljahresende löschen | In der Lehrkräfte-Ansicht die Klasse öffnen → „Klasse löschen“ |
-| Update der Datenbankfunktionen | `supabase/schema.sql` erneut komplett im SQL Editor ausführen (Daten bleiben erhalten) |
+| Update der Datenbankfunktionen | `supabase/schema.sql` erneut komplett im SQL Editor ausführen (Daten bleiben erhalten) – nötig z. B. seit den Umschlagfarben der Klassen |
 
 **Hinweis zum kostenlosen Supabase-Tarif:** Laut Supabase-Dokumentation werden kostenlose Projekte
 nach etwa einer Woche ohne Aktivität pausiert und können im Dashboard wieder gestartet werden
@@ -137,7 +137,9 @@ nicht den Programmcode.
 
 ```
 index.html                Einstiegsseite
-css/style.css             Gestaltung (inkl. Dunkelmodus)
+css/style.css             Gestaltung „Schulheft“ (inkl. Dunkelmodus), siehe DESIGN.md
+PRODUCT.md, DESIGN.md     Produkt- und Gestaltungsgrundlagen für spätere Änderungen
+js/icons.js               eigenes Icon-Set (SVG)
 js/config.js              Supabase-Zugangsdaten (öffentlich)
 js/app.js                 Seitenpasswort, Navigation
 js/student.js             Schüleransicht
@@ -146,7 +148,7 @@ js/calendar.js            Kalender (Wochenansicht)
 js/pdf.js                 PDF für besuchende Lehrkräfte
 js/ics.js                 Kalenderexport (.ics)
 js/common.js, ui.js, api.js  gemeinsame Bausteine
-assets/                   Gesprächsleitfaden (PDF), Schriftart für die PDF
+assets/                   Gesprächsleitfaden (PDF), Schriften (Lexend für die Seite, Liberation Sans für die PDF)
 vendor/                   pdf-lib + fontkit (lokal, kein CDN)
 supabase/schema.sql       Datenbankschema + alle Serverfunktionen
 dev/                      lokaler Testserver + automatisierter Browsertest (nicht für den Betrieb nötig)
@@ -174,3 +176,4 @@ Funktionen als Rolle `anon` auf – genau wie Supabase.
 * [pdf-lib](https://github.com/Hopding/pdf-lib) 1.17.1 – MIT (`vendor/pdf-lib.LICENSE.md`)
 * [@pdf-lib/fontkit](https://github.com/Hopding/fontkit) 1.1.1 – MIT
 * Liberation Sans – SIL Open Font License 1.1 (`assets/fonts/LICENSE-OFL.txt`)
+* Lexend 5.3.0 (über @fontsource-variable/lexend) – SIL Open Font License 1.1 (`assets/fonts/LICENSE-Lexend-OFL.txt`)

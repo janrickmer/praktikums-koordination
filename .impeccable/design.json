@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-09T20:18:34.265408+00:00",
+  "title": "Design System: Praktikumsportal GCLS Kassel",
+  "extensions": {
+    "colorMeta": {
+      "cover-blue": {
+        "role": "primary",
+        "displayName": "Umschlag Blau"
+      },
+      "cover-green": {
+        "role": "primary",
+        "displayName": "Umschlag Grün"
+      },
+      "cover-orange": {
+        "role": "primary",
+        "displayName": "Umschlag Orange"
+      },
+      "cover-violet": {
+        "role": "primary",
+        "displayName": "Umschlag Violett"
+      },
+      "correction-red": {
+        "role": "secondary",
+        "displayName": "Korrektur-Rot"
+      },
+      "margin-red": {
+        "role": "secondary",
+        "displayName": "Rand-Rot"
+      },
+      "calendar-red": {
+        "role": "tertiary",
+        "displayName": "Kalender-Rot"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Heftpapier"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinte"
+      },
+      "ink-band": {
+        "role": "neutral",
+        "displayName": "Lehrkräfte-Band"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Nur der Wortmarken-Titel auf dem Einstiegs-Umschlag."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Seitentitel im Kopfband."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Titel der Blätter."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Fließtext in der Systemschrift."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Feldbezeichnungen."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "Tag auf dem Kalenderblatt."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sheet",
+        "value": "0 1px 2px rgba(23,32,43,.05), 0 3px 10px -4px rgba(23,32,43,.08)",
+        "purpose": "Blätter und Hefte in Ruhe."
+      },
+      {
+        "name": "float",
+        "value": "0 14px 34px -10px rgba(23,32,43,.32), 0 3px 8px rgba(23,32,43,.12)",
+        "purpose": "Meldungen, Nachrichten-Fenster, Speicherleiste, Heft-Hover."
+      },
+      {
+        "name": "etikett",
+        "value": "0 1px 0 rgba(0,0,0,.12), 0 8px 22px -12px rgba(0,0,0,.45)",
+        "purpose": "Etiketten auf dem Umschlag."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Eintritt, Druck-Rückmeldung, Hover-Anhebung."
+      },
+      {
+        "name": "ease-in-out",
+        "value": "cubic-bezier(0.77, 0, 0.175, 1)",
+        "purpose": "Rückzug des Korrekturrands (900 ms, einmalig)."
+      },
+      {
+        "name": "press",
+        "value": "transform 160ms ease-out, scale(0.97)",
+        "purpose": "Buttons beim Drücken."
+      },
+      {
+        "name": "toast",
+        "value": "opacity/transform 240ms ease-out, Austritt 180ms",
+        "purpose": "Meldungen."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "600px"
+      },
+      {
+        "name": "table-stack",
+        "value": "640px"
+      },
+      {
+        "name": "single-column",
+        "value": "860px"
+      },
+      {
+        "name": "detail-stack",
+        "value": "900px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primär-Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Hauptaktion eines Formulars oder Blatts, in der Umschlagfarbe der Klasse.",
+      "html": "<button class=\"ds-btn-primary\">Speichern</button>",
+      "css": ".ds-btn-primary{font:600 .95rem/1.2 system-ui,sans-serif;min-height:2.75rem;padding:.62rem 1rem;border-radius:6px;border:1px solid var(--cover,#2a5fd0);background:var(--cover,#2a5fd0);color:#fff;cursor:pointer;transition:background-color 150ms ease,transform 160ms cubic-bezier(.23,1,.32,1)}.ds-btn-primary:hover{background:color-mix(in oklab,var(--cover,#2a5fd0) 86%,#000)}.ds-btn-primary:active{transform:scale(.97)}.ds-btn-primary:focus-visible{outline:3px solid color-mix(in oklab,var(--cover,#2a5fd0) 60%,transparent);outline-offset:2px}"
+    },
+    {
+      "name": "Sekundär-Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Nebenaktion auf weißem Blatt.",
+      "html": "<button class=\"ds-btn\">Abbrechen</button>",
+      "css": ".ds-btn{font:600 .95rem/1.2 system-ui,sans-serif;min-height:2.75rem;padding:.62rem 1rem;border-radius:6px;border:1px solid #c6cfdb;background:#fff;color:#17202b;cursor:pointer;transition:background-color 150ms ease,transform 160ms cubic-bezier(.23,1,.32,1)}.ds-btn:hover{background:#f1f4f8}.ds-btn:active{transform:scale(.97)}.ds-btn:focus-visible{outline:3px solid rgba(42,95,208,.6);outline-offset:2px}"
+    },
+    {
+      "name": "Eingabefeld",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Textfeld mit Fokus in Umschlagfarbe.",
+      "html": "<label class=\"ds-field\"><span>Name des Praktikumsbetriebs</span><input class=\"ds-input\" value=\"Autohaus Kassel GmbH\"></label>",
+      "css": ".ds-field{display:grid;gap:.35rem;font:600 .93rem system-ui,sans-serif;color:#17202b}.ds-input{font:400 1rem system-ui,sans-serif;min-height:2.75rem;padding:.62rem .75rem;border:1px solid #c6cfdb;border-radius:6px;background:#fff;color:#17202b}.ds-input:focus{outline:none;border-color:#2a5fd0;box-shadow:0 0 0 3px rgba(42,95,208,.22)}"
+    },
+    {
+      "name": "Heft-Etikett",
+      "kind": "custom",
+      "refersTo": "etikett",
+      "description": "Weißes Etikett mit Schreiblinien für Name, Klasse, Code.",
+      "html": "<div class=\"ds-etikett\"><div class=\"ds-row\"><span>Name</span><b>Max Mustermann</b></div><div class=\"ds-row\"><span>Klasse</span><b>9b · Jg. 9</b></div><div class=\"ds-row\"><span>Fach</span><b>Betriebspraktikum</b></div></div>",
+      "css": ".ds-etikett{background:#fff;color:#17202b;border-radius:9px;padding:.7rem 1rem .55rem;min-width:280px;box-shadow:0 1px 0 rgba(0,0,0,.12),0 8px 22px -12px rgba(0,0,0,.45)}.ds-row{display:flex;gap:.75rem;align-items:baseline;padding:.3rem 0 .2rem;border-bottom:1px solid #c6cfdb}.ds-row span{color:#5f6a7b;font:400 .8rem system-ui,sans-serif;min-width:4.4rem}.ds-row b{font:500 1rem Lexend,system-ui,sans-serif}"
+    },
+    {
+      "name": "Blatt mit Korrekturrand",
+      "kind": "card",
+      "refersTo": "sheet",
+      "description": "Dashboard-Blatt mit gedrucktem Rand; die rote Linie markiert fehlende Angaben.",
+      "html": "<section class=\"ds-sheet ds-missing\"><h2>Betriebssteckbrief</h2><dl><dt>Praktikumsbetrieb</dt><dd>Architekturbüro Nord</dd><dt class=\"ds-m\">Praktikumsberuf</dt><dd><i>fehlt noch</i></dd></dl></section>",
+      "css": ".ds-sheet{position:relative;background:#fff;border:1px solid #e0e5ec;border-radius:10px;padding:1.25rem 1.35rem 1.25rem calc(2.6rem + 1.1rem);box-shadow:0 1px 2px rgba(23,32,43,.05),0 3px 10px -4px rgba(23,32,43,.08);font:16px/1.55 system-ui,sans-serif;color:#17202b}.ds-sheet::after{content:'';position:absolute;top:0;bottom:0;left:2.6rem;width:1px;background:rgba(224,71,92,.38)}.ds-missing::before{content:'';position:absolute;top:0;bottom:0;left:2.6rem;width:2px;background:#e0475c;z-index:1}.ds-sheet h2{font:600 1.12rem Lexend,system-ui,sans-serif;margin:0 0 .75rem}.ds-sheet dl{display:grid;grid-template-columns:40% 1fr;gap:.45rem 1rem;margin:0}.ds-sheet dt{color:#5f6a7b;font-size:.9rem}.ds-sheet dd{margin:0}.ds-sheet i{color:#b3132b;font-size:.92rem}"
+    },
+    {
+      "name": "Klassen-Heft",
+      "kind": "card",
+      "description": "Klasse als Heft in Umschlagfarbe mit Bindung und Etikett.",
+      "html": "<a class=\"ds-heft\" href=\"#\"><span class=\"ds-lab\"><b>9b</b><span>Jahrgang · Jg. 9</span><span>Code · K7M2PX</span></span><span class=\"ds-stats\">5 Schüler/-innen · 3 Termine</span></a>",
+      "css": ".ds-heft{position:relative;display:flex;flex-direction:column;gap:.9rem;width:280px;min-height:200px;padding:1.1rem 1.1rem 1rem 2.0rem;border-radius:8px 12px 12px 8px;background:#2a5fd0;color:#fff;text-decoration:none;font:16px system-ui,sans-serif;transition:transform 200ms cubic-bezier(.23,1,.32,1),box-shadow 200ms}.ds-heft::before{content:'';position:absolute;inset:0 auto 0 0;width:14px;border-radius:8px 0 0 8px;background:color-mix(in oklab,#2a5fd0 70%,#000)}.ds-heft:hover{transform:translateY(-3px);box-shadow:0 14px 34px -10px rgba(23,32,43,.32)}.ds-lab{display:grid;background:#fff;color:#17202b;border-radius:8px;padding:.65rem .9rem .5rem}.ds-lab b{font:600 1.6rem Lexend,system-ui,sans-serif;border-bottom:1px solid #c6cfdb;padding-bottom:.3rem}.ds-lab span{font-size:.85rem;color:#5f6a7b;padding:.3rem 0;border-bottom:1px solid #c6cfdb}.ds-stats{font-size:.88rem;margin-top:auto}"
+    },
+    {
+      "name": "Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Status mit Icon, z. B. Format des Praktikumsbesuchs.",
+      "html": "<span class=\"ds-tag\">Präsenz · ich</span>",
+      "css": ".ds-tag{display:inline-flex;align-items:center;gap:.3rem;font:600 .8rem/1.3 system-ui,sans-serif;padding:.2rem .55rem;border-radius:999px;background:color-mix(in oklab,#2a5fd0 9%,#fff);color:color-mix(in oklab,#2a5fd0 82%,#000)}"
+    },
+    {
+      "name": "Reiter-Navigation",
+      "kind": "nav",
+      "description": "Lehrkräfte-Navigation im dunklen Band.",
+      "html": "<nav class=\"ds-tabs\"><a class=\"is-active\" href=\"#\">Meine Klassen</a><a href=\"#\">Kalender</a><a href=\"#\">Profil &amp; Notfallkontakt</a></nav>",
+      "css": ".ds-tabs{display:flex;gap:.25rem;background:#1d2633;padding:0 1rem;border-bottom:1px solid rgba(255,255,255,.16)}.ds-tabs a{color:rgba(255,255,255,.84);text-decoration:none;font:600 .93rem system-ui,sans-serif;padding:.65rem .85rem;border-bottom:2px solid transparent}.ds-tabs a:hover{color:#fff}.ds-tabs a.is-active{color:#fff;border-bottom-color:#fff}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Das Praktikumsheft",
+    "overview": "Das Portal ist das Heft, das jede Klasse für ihr Betriebspraktikum führt. Der Grund ist kühles, fein kariertes Heftpapier; oben liegt der Heftumschlag in der Farbe der Klasse, und auf ihm klebt ein weißes Etikett mit Name, Klasse und Fach. Wo etwas fehlt, steht – wie bei einer Korrektur – der rote Rand. Sobald alles eingetragen ist, verschwindet er.",
+    "keyCharacteristics": [
+      "Kopfband in der Umschlagfarbe der Klasse (Lehrkräfte-Übersicht: dunkles Band), Inhalt auf kariertem Papier.",
+      "Weiße Blätter mit sanftem Schatten; Identitätsdaten auf Etiketten mit Schreiblinien.",
+      "Roter Korrekturrand ausschließlich für fehlende Angaben, immer zusammen mit Text („fehlt noch“).",
+      "Großes Abreiß-Kalenderblatt für feste Termine.",
+      "Eigenes, einheitliches SVG-Icon-Set (24er-Raster, Strichstärke 1,75)."
+    ],
+    "rules": [
+      {
+        "name": "The Correction Ink Rule",
+        "body": "Rot bedeutet „fehlt“ oder „Fehler“ – sonst nichts. Keine roten Dekorationen, keine roten Status für Anfragen oder Hinweise.",
+        "section": "colors"
+      },
+      {
+        "name": "The Cover Rule",
+        "body": "Jede Klasse besitzt genau eine Umschlagfarbe; sie färbt Band, Primär-Buttons, Fokus, Auswahl und Termine dieser Klasse. Der Klassenname steht immer dabei – Farbe ist nie die einzige Information.",
+        "section": "colors"
+      },
+      {
+        "name": "The Dark Cover Rule",
+        "body": "Im Dunkelmodus wird das Umschlag-Band zu 28 % abgedunkelt, damit es nicht heller leuchtet als der Inhalt.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Zahlen, Uhrzeiten, Entfernungen und Codes stehen in Tabellenziffern; Codes zusätzlich gesperrt (0.12–0.14em) in Lexend.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Display Voice Rule",
+        "body": "Lexend nur für Überschriften, Etikett-Werte, Kürzel, Codes und Zahlen – nie für Fließtext.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do gib jeder Klasse eine der vier Umschlagfarben und setze den Klassennamen immer daneben.",
+      "Do markiere fehlende Angaben mit Korrekturrand und Text („fehlt noch“, „n fehlen“).",
+      "Do setze Identitätsdaten (Name, Klasse, Code) auf ein Etikett mit Schreiblinien.",
+      "Do verwende für neue Icons das eigene Set (24er-Raster, Strichstärke 1,75, currentColor).",
+      "Do halte Animationen kurz und selten: Buttons 160 ms, Meldungen 240 ms, nur der Korrekturrand hat einen längeren, einmaligen Moment; reduzierte Bewegung respektieren."
+    ],
+    "donts": [
+      "Don't verwende Rot für irgendetwas anderes als Fehlendes oder Fehler.",
+      "Don't setze kleine Überschriften-Labels („Eyebrows“) über Seiten- oder Blatt-Titel; Zusatzinfos gehören ins Etikett oder in die Unterzeile.",
+      "Don't nutze Unicode-Zeichen oder Emoji als Icons.",
+      "Don't lade Schriften, Bilder oder Skripte von fremden Servern.",
+      "Don't ersetze Tabellen oder Formulare durch Heft-Linien-Kostüme – die Welt wirkt nur über Farbe, Schrift, Dichte und den Korrekturrand."
+    ]
+  }
+}

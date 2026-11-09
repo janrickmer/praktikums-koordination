@@ -1,9 +1,10 @@
 import { CONFIG } from './config.js';
 
 export class ApiError extends Error {
-  constructor(message, hint = null) {
+  constructor(message, hint = null, code = null) {
     super(message);
     this.hint = hint;
+    this.code = code;
   }
 }
 
@@ -49,7 +50,7 @@ export async function rpc(fn, params = {}) {
   if (!res.ok) {
     const code = data && data.code;
     const message = (code && FRIENDLY[code]) || (data && data.message) || `Serverfehler (${res.status}). Bitte versuche es später erneut.`;
-    const err = new ApiError(message, data && data.hint);
+    const err = new ApiError(message, data && data.hint, code || null);
     if (err.hint === 'session' || err.hint === 'site') {
       for (const key of Object.values(KEYS)) {
         if ((err.hint === 'site' && key === KEYS.site) || (params.p_token && store.get(key) === params.p_token)) store.del(key);

@@ -32,14 +32,61 @@ export function render(el, content) {
   el.innerHTML = String(content);
 }
 
-/** Rechter Bereich der Kopfzeile (Bereich, Benutzername, Abmelden …) */
-export function setHeader({ area = '', user = '', actions = null } = {}) {
+// Navigations-Token: Eine Seite, deren Daten erst nach einem Seitenwechsel ankommen,
+// darf die neue Seite nicht mehr überschreiben.
+let navGen = 0;
+export const bumpNav = () => ++navGen;
+export const navToken = () => navGen;
+export const isStale = (tok) => tok !== navGen;
+
+const DEFAULT_COVER = '#2a5fd0';
+
+/**
+ * Rahmen der Seite: Farbe des Umschlags (Kopfband), Bereichsname, Benutzer, Aktionen.
+ * band: 'cover' = Klassenfarbe, 'ink' = dunkles Lehrkräfte-Band.
+ */
+export function setHeader({ area = '', user = '', actions = null, cover = DEFAULT_COVER, band = 'cover' } = {}) {
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty('--cover', cover || DEFAULT_COVER);
+  document.body.dataset.band = band;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', band === 'ink' ? '#1d2633' : (cover || DEFAULT_COVER));
+  const area$ = document.getElementById('header-area');
+  if (area$) area$.textContent = area || '';
   const el = document.getElementById('header-right');
   if (!el) return;
   render(el, html`
-    ${area ? html`<span class="header-area">${area}</span>` : ''}
     ${user ? html`<span class="header-user">${user}</span>` : ''}
     ${actions || ''}`);
+}
+
+/**
+ * Kopfband einer Seite in der Umschlagfarbe.
+ * crumbs: Brotkrumen (HTML), title: Überschrift, sub: Unterzeile, aside: rechter Bereich (z. B. Etikett),
+ * tabs: Navigation im Band, lift: Inhalt überlappt das Band (für einzelne Formulare).
+ */
+export function band({ crumbs = '', title = '', sub = '', aside = '', tabs = '', lift = false } = {}) {
+  return html`<section class="band ${lift ? 'band--lift' : ''} ${tabs ? 'band--tabs' : ''}">
+    <div class="wrap">
+      ${tabs || ''}
+      ${crumbs ? html`<div class="band__crumbs">${crumbs}</div>` : ''}
+      <div class="band__row">
+        <div class="band__title">
+          <h1>${title}</h1>
+          ${sub ? html`<p class="band__sub">${sub}</p>` : ''}
+        </div>
+        ${aside ? html`<div class="band__aside">${aside}</div>` : ''}
+      </div>
+    </div>
+  </section>`;
+}
+
+/** Heft-Etikett: Zeilen aus [Bezeichnung, Wert] */
+export function etikett(rows, extra = '') {
+  return html`<div class="etikett">
+    ${rows.filter(Boolean).map(([label, value]) => html`<div class="etikett__row"><span class="etikett__label">${label}</span><span class="etikett__value">${value}</span></div>`)}
+    ${extra}
+  </div>`;
 }
 
 
@@ -69,7 +116,8 @@ export async function submitting(form, fn) {
   const button = form.querySelector('[type=submit]');
   const errorBox = form.querySelector('.form-error');
   if (errorBox) { errorBox.textContent = ''; errorBox.hidden = true; }
-  if (button) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = 'Bitte warten …'; }
+  const label = button ? button.innerHTML : '';
+  if (button) { button.disabled = true; button.setAttribute('aria-busy', 'true'); button.textContent = 'Bitte warten …'; }
   try {
     return await fn();
   } catch (e) {
@@ -77,13 +125,13 @@ export async function submitting(form, fn) {
     else toast(e.message || String(e), 'error');
     return undefined;
   } finally {
-    if (button && button.isConnected) { button.disabled = false; button.textContent = button.dataset.label; }
+    if (button && button.isConnected) { button.disabled = false; button.removeAttribute('aria-busy'); button.innerHTML = label; }
   }
 }
 
 /** Für einfache Buttons ohne Formular. */
 export async function busy(button, fn) {
-  const label = button.textContent;
+  const label = button.innerHTML;
   button.disabled = true;
   try {
     return await fn();
@@ -91,7 +139,7 @@ export async function busy(button, fn) {
     toast(e.message || String(e), 'error');
     return undefined;
   } finally {
-    if (button.isConnected) { button.disabled = false; button.textContent = label; }
+    if (button.isConnected) { button.disabled = false; button.innerHTML = label; }
   }
 }
 
@@ -106,7 +154,7 @@ export function toast(message, type = 'ok') {
   while (root.children.length >= 2) root.firstElementChild.remove();
   root.appendChild(el);
   setTimeout(() => el.classList.add('toast--out'), type === 'error' ? 6000 : 3200);
-  setTimeout(() => el.remove(), type === 'error' ? 6600 : 3800);
+  setTimeout(() => el.remove(), type === 'error' ? 6300 : 3500);
 }
 
 export function go(hash) {

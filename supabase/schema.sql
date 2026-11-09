@@ -126,6 +126,15 @@ create table if not exists app.sessions (
 );
 create index if not exists sessions_user_idx on app.sessions(user_id);
 
+-- Umschlagfarbe der Klasse (0–3), nachträglich ergänzt
+alter table app.classes add column if not exists cover smallint;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'classes_cover_check') then
+    alter table app.classes add constraint classes_cover_check check (cover between 0 and 3);
+  end if;
+end $$;
+
 create table if not exists app.reset_requests (
   student_id       uuid primary key references app.students(id) on delete cascade,
   class_id         uuid not null references app.classes(id) on delete cascade,
@@ -502,7 +511,7 @@ begin
     'classes', coalesce((
         select jsonb_agg(jsonb_build_object(
                  'id', c.id, 'grade', c.grade, 'name', c.name, 'join_code', c.join_code,
-                 'created_at', c.created_at,
+                 'created_at', c.created_at, 'cover', c.cover,
                  'student_count', (select count(*) from app.students s where s.class_id = c.id),
                  'lodging_count', (select count(*) from app.students s where s.class_id = c.id and s.lodging_away),
                  'missing_info_count', (
@@ -532,10 +541,11 @@ begin
   return v;
 end $$;
 
-create or replace function public.teacher_create_class(p_token text, p_grade text, p_name text)
+drop function if exists public.teacher_create_class(text, text, text);
+create or replace function public.teacher_create_class(p_token text, p_grade text, p_name text, p_cover int default null)
 returns jsonb language plpgsql security definer
 set search_path = app, extensions, public, pg_temp as $$
-declare v_t uuid := app.auth(p_token, 'teacher'); v_code text; v_id uuid; v_name text;
+declare v_t uuid := app.auth(p_token, 'teacher'); v_code text; v_id uuid; v_name text; v_cover int;
 begin
   if p_grade not in ('9', '11') then
     raise exception 'Bitte wähle den Jahrgang (Jg. 9 oder Jg. 11).';
@@ -544,13 +554,35 @@ begin
   if exists (select 1 from app.classes where teacher_id = v_t and lower(name) = lower(v_name)) then
     raise exception 'Du hast bereits eine Klasse mit dem Namen "%".', v_name;
   end if;
+  if p_cover between 0 and 3 then
+    v_cover := p_cover;
+  else
+    -- am wenigsten genutzte Umschlagfarbe dieser Lehrkraft
+    select g.i into v_cover
+      from generate_series(0, 3) as g(i)
+      left join app.classes c on c.teacher_id = v_t and c.cover = g.i
+     group by g.i order by count(c.id), g.i limit 1;
+  end if;
   loop
     v_code := app.random_code(6);
     exit when not exists (select 1 from app.classes where join_code = v_code);
   end loop;
-  insert into app.classes (teacher_id, grade, name, join_code)
-  values (v_t, p_grade, v_name, v_code) returning id into v_id;
-  return jsonb_build_object('id', v_id, 'join_code', v_code, 'name', v_name, 'grade', p_grade);
+  insert into app.classes (teacher_id, grade, name, join_code, cover)
+  values (v_t, p_grade, v_name, v_code, v_cover) returning id into v_id;
+  return jsonb_build_object('id', v_id, 'join_code', v_code, 'name', v_name, 'grade', p_grade, 'cover', v_cover);
+end $$;
+
+create or replace function public.teacher_set_class_cover(p_token text, p_class_id uuid, p_cover int)
+returns jsonb language plpgsql security definer
+set search_path = app, extensions, public, pg_temp as $$
+declare v_t uuid := app.auth(p_token, 'teacher'); c app.classes;
+begin
+  c := app.own_class(v_t, p_class_id);
+  if p_cover is null or p_cover not between 0 and 3 then
+    raise exception 'Unbekannte Umschlagfarbe.';
+  end if;
+  update app.classes set cover = p_cover where id = c.id;
+  return jsonb_build_object('ok', true);
 end $$;
 
 create or replace function public.teacher_delete_class(p_token text, p_class_id uuid, p_confirm_name text)
@@ -711,7 +743,7 @@ begin
     'appointments', coalesce((
       select jsonb_agg(jsonb_build_object(
                'student_id', s.id, 'first_name', s.first_name, 'last_name', s.last_name,
-               'email', s.email, 'class_id', c.id, 'class_name', c.name, 'grade', c.grade,
+               'email', s.email, 'class_id', c.id, 'class_name', c.name, 'grade', c.grade, 'cover', c.cover,
                'kind', app.visit_kind(s.visit_format, s.visit_by_me),
                'start', s.appt_start, 'end', s.appt_end,
                'location', s.appt_location, 'note', s.appt_note,
@@ -946,7 +978,7 @@ begin
       'lodging_relation', s.lodging_relation, 'lodging_contact', s.lodging_contact,
       'class_team', s.class_team, 'mobile_phone', s.mobile_phone),
     'class', case when c.id is null then null else
-      jsonb_build_object('name', c.name, 'grade', c.grade) end,
+      jsonb_build_object('id', c.id, 'name', c.name, 'grade', c.grade, 'cover', c.cover) end,
     'teacher', case when t.id is null then null else
       jsonb_build_object('contact_name', t.contact_name, 'contact_email', t.contact_email,
                          'contact_phone', t.contact_phone) end,
@@ -1065,7 +1097,7 @@ declare
     'teacher_get_appointments', 'teacher_issue_reset_code', 'teacher_dismiss_reset',
     'student_register', 'student_login', 'student_request_reset', 'student_login_with_code',
     'student_set_new_password', 'student_change_password', 'student_get_state',
-    'student_join_class', 'student_save_profile'];
+    'student_join_class', 'student_save_profile', 'teacher_set_class_cover'];
   r text;
 begin
   -- Zugriff auf das Schema public ausdrücklich erlauben (unabhängig von Supabase-Standardeinstellungen)

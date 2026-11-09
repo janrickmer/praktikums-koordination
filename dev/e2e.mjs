@@ -36,6 +36,19 @@ const rpc = (page, fn, params) => page.evaluate(async ([f, p]) => {
   return r.json();
 }, [fn, params]);
 
+async function gotoHash(page, hash, waitFor) {
+  await page.evaluate((h) => { location.hash = h; }, hash);
+  if (!waitFor) return;
+  try {
+    await page.waitForSelector(waitFor);
+  } catch (e) {
+    const info = await page.evaluate(() => ({ hash: location.hash, main: document.querySelector('main').innerText.slice(0, 400) }));
+    console.error('Navigation hängt:', JSON.stringify(info), '\nBrowser-Fehler:', errors.join(' | '));
+    throw e;
+  }
+}
+const gotoClasses = (page) => gotoHash(page, '#/lehrkraft', 'h1:has-text("Meine Klassen")');
+
 async function passGate(page) {
   await page.goto(BASE);
   await page.fill('#gate-form input[name=password]', 'falsch');
@@ -138,7 +151,7 @@ assert.match(notice, /Betreuungsperson/);
 assert.match(notice, /Kontaktmöglichkeit im Notfall/);
 assert.doesNotMatch(notice, /Klassenteam/);
 assert.match(await student.textContent('#praktikumsbesuch'), /spätestens am ersten Tag deines Praktikums/);
-assert.match(await student.textContent('.card--sick'), /Im Krankheitsfall melden Sie sich bitte 1\. per E-Mail/);
+assert.match(await student.textContent('.card--sick'), /Im Krankheitsfall meldest du dich bitte frühzeitig ab[\s\S]*per E-Mail bei deiner PoWi-Lehrerin/);
 assert.match(await student.textContent('.card--emergency'), /Frau Beispiel[\s\S]*0561 123456/);
 await shot(student, '03-schueler-dashboard-mobil');
 log('Steckbrief, Unterkunft, Klassenteam gespeichert; roter Hinweis zeigt fehlende Angaben');
@@ -155,6 +168,9 @@ await student.fill('textarea[name=lodging_contact]', '0170 1234567');
 await student.click('#steckbrief-form button[type=submit]');
 await student.waitForSelector('h1:has-text("Praktikums-Dashboard")');
 assert.equal(await student.locator('.notice--danger').count(), 0);
+await student.waitForSelector('.sheet.margin-clearing .done-badge');
+await student.waitForTimeout(1900);
+await shot(student, '03b-schueler-rand-verschwindet-mobil');
 log('Fehlende Angaben nachgetragen → roter Hinweis verschwindet (ungültige E-Mail abgewiesen)');
 
 // Weitere Schüler über die Schnittstelle anlegen
@@ -176,7 +192,7 @@ log('Drei weitere Schüler angelegt (u. a. mit türkischen Sonderzeichen)');
 
 // ---------------------------------------------------------------------
 console.log('Lehrkraft: Klassenansicht, Sortierung, Klassenteam');
-await teacher.click('.subnav a:has-text("Meine Klassen")');
+await gotoClasses(teacher);
 await teacher.click('a.class-card:has-text("9b")');
 await teacher.waitForSelector('.student-table');
 const rows = async () => teacher.$$eval('.student-table tbody tr td:nth-child(2) a', (as) => as.map((a) => a.textContent.trim()));
@@ -203,10 +219,19 @@ await teacher.waitForSelector('.cloud-detail');
 assert.match(await teacher.textContent('.cloud-detail'), /Lea Albrecht, Max Mustermann/);
 log(`Klassenteam-Wolke: Schriftgröße nach Häufigkeit ${JSON.stringify(sizes)}; Klick zeigt Schüler`);
 
+await teacher.click('.settings summary');
+await teacher.check('#cover-form input[name=cover][value="1"]', { force: true });
+await teacher.click('#cover-form button[type=submit]');
+await teacher.waitForSelector('.toast:has-text("Umschlagfarbe")');
+await teacher.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--cover').trim() === '#17804b');
+const coverState = await rpc(student, 'student_get_state', { p_token: tokLea });
+assert.equal(coverState.class.cover, 1);
+log('Umschlagfarbe der Klasse geändert (Lehrkraft- und Schüleransicht)');
+
 // ---------------------------------------------------------------------
 console.log('Lehrkraft: Praktikumsbesuche / Videocalls / Nachrichten');
 async function openStudent(name) {
-  await teacher.click('.subnav a:has-text("Meine Klassen")');
+  await gotoClasses(teacher);
   await teacher.click('a.class-card:has-text("9b")');
   await teacher.click(`.student-table a:has-text("${name}")`);
   await teacher.waitForSelector('#visit-form');
@@ -227,7 +252,7 @@ await openStudent('Becker, Tom');
 await setVisit('praesenz', 'me');
 await openStudent('Albrecht, Lea');
 await setVisit('video');
-await teacher.click('.breadcrumb a:has-text("9b")');
+await teacher.click('.band__crumbs a:has-text("9b")');
 await teacher.waitForSelector('.notice--danger');
 const warn = await teacher.textContent('.notice--danger');
 assert.match(warn, /Praktikumsbesuche durch mich:.*Tom Becker, Max Mustermann/s);
@@ -348,15 +373,14 @@ log('Schüleransichten für „andere Lehrkraft“ und „Videocall“ geprüft'
 
 // ---------------------------------------------------------------------
 console.log('Lehrkraft: Kalender & ICS');
-await teacher.click('.subnav a:has-text("Kalender")');
-await teacher.waitForSelector('.week');
+await gotoHash(teacher, '#/lehrkraft/kalender', '.week');
 await teacher.goto(`${BASE}/#/lehrkraft/kalender?woche=2026-11-16`);
 await teacher.waitForSelector('.event');
 assert.equal(await teacher.locator('.event').count(), 3);
 const overlap = await teacher.$$eval('.event', (es) => es.map((e) => e.style.width));
 assert.ok(overlap.filter((w) => w.includes('50%')).length === 2, JSON.stringify(overlap));
 await shot(teacher, '10-lehrkraft-kalender');
-await teacher.click('a:has-text("Nächste →")');
+await teacher.click('.cal-toolbar a:has-text("Nächste")');
 await teacher.waitForSelector('.cal-empty');
 await teacher.click('a:has-text("Zum letzten Termin")');
 await teacher.waitForSelector('.event');
@@ -377,7 +401,7 @@ await forgot.click('a:has-text("Passwort vergessen")');
 await forgot.fill('#forgot-form input[name=email]', sEmail);
 await forgot.click('#forgot-form button[type=submit]');
 await forgot.waitForSelector('text=Anfrage gesendet');
-await teacher.click('.subnav a:has-text("Meine Klassen")');
+await gotoClasses(teacher);
 await teacher.waitForSelector('.request-list');
 assert.match(await teacher.textContent('.request-list'), /Mustermann, Max/);
 await teacher.click('[data-issue]');
