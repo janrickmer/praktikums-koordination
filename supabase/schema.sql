@@ -1068,6 +1068,12 @@ declare
     'student_join_class', 'student_save_profile'];
   r text;
 begin
+  -- Zugriff auf das Schema public ausdrücklich erlauben (unabhängig von Supabase-Standardeinstellungen)
+  foreach r in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = r) then
+      execute format('grant usage on schema public to %I', r);
+    end if;
+  end loop;
   for f in
     select p.oid::regprocedure as sig, p.proname
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
