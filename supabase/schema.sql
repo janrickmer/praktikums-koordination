@@ -126,6 +126,19 @@ create table if not exists app.sessions (
 );
 create index if not exists sessions_user_idx on app.sessions(user_id);
 
+-- Administration und Passwort-Hilfe für Lehrkräfte (nachträglich ergänzt)
+alter table app.teachers add column if not exists is_admin boolean not null default false;
+alter table app.teachers add column if not exists must_change_password boolean not null default false;
+
+create table if not exists app.teacher_reset_requests (
+  teacher_id       uuid primary key references app.teachers(id) on delete cascade,
+  created_at       timestamptz not null default now(),
+  code_hash        text,
+  code_issued_at   timestamptz,
+  code_expires_at  timestamptz
+);
+alter table app.teacher_reset_requests enable row level security;
+
 -- Umschlagfarbe der Klasse (0–3), nachträglich ergänzt
 alter table app.classes add column if not exists cover smallint;
 do $$
@@ -369,6 +382,29 @@ begin
   return 'Seitenpasswort und Lehrkräfte-Code wurden gespeichert.';
 end $$;
 
+-- Admin-Rechte vergeben bzw. entziehen (nur im SQL Editor):
+--   select app.set_admin('dienstliche@adresse.de');          -- vergeben
+--   select app.set_admin('dienstliche@adresse.de', false);   -- entziehen
+create or replace function app.set_admin(p_email text, p_is_admin boolean default true)
+returns text language plpgsql volatile as $$
+declare v_id uuid;
+begin
+  update app.teachers set is_admin = coalesce(p_is_admin, true)
+   where email = lower(btrim(coalesce(p_email, ''))) returning id into v_id;
+  if v_id is null then
+    raise exception 'Keine Lehrkraft mit dieser E-Mail-Adresse gefunden.';
+  end if;
+  return case when coalesce(p_is_admin, true) then 'Admin-Rechte vergeben.' else 'Admin-Rechte entzogen.' end;
+end $$;
+
+create or replace function app.require_admin(p_teacher uuid)
+returns void language plpgsql stable as $$
+begin
+  if not exists (select 1 from app.teachers where id = p_teacher and is_admin) then
+    raise exception 'Diese Funktion ist der Administration des Portals vorbehalten.';
+  end if;
+end $$;
+
 -- Passwort einer Lehrkraft zurücksetzen (z. B. bei "Passwort vergessen")
 create or replace function app.admin_reset_teacher_password(p_email text, p_new_password text)
 returns text language plpgsql volatile as $$
@@ -504,10 +540,15 @@ returns jsonb language plpgsql security definer
 set search_path = app, extensions, public, pg_temp as $$
 declare v_t uuid := app.auth(p_token, 'teacher'); v jsonb;
 begin
+  if exists (select 1 from app.teachers where id = v_t and must_change_password) then
+    raise exception 'Bitte lege zuerst ein neues Passwort fest.' using hint = 'must_change';
+  end if;
   select jsonb_build_object(
     'teacher', jsonb_build_object(
         'id', t.id, 'first_name', t.first_name, 'last_name', t.last_name, 'email', t.email,
-        'contact_name', t.contact_name, 'contact_email', t.contact_email, 'contact_phone', t.contact_phone),
+        'contact_name', t.contact_name, 'contact_email', t.contact_email, 'contact_phone', t.contact_phone,
+        'is_admin', t.is_admin),
+    'teacher_requests', case when t.is_admin then (select count(*) from app.teacher_reset_requests) else 0 end,
     'classes', coalesce((
         select jsonb_agg(jsonb_build_object(
                  'id', c.id, 'grade', c.grade, 'name', c.name, 'join_code', c.join_code,
@@ -1079,6 +1120,122 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+--  Öffentliche API – Lehrkräfte: Passwort vergessen (über die Administration)
+-- ---------------------------------------------------------------------
+
+-- Anfrage an die Administration (immer dieselbe Antwort, keine Auskunft über Konten)
+create or replace function public.teacher_request_reset(p_site_password text, p_email text)
+returns jsonb language plpgsql security definer
+set search_path = app, extensions, public, pg_temp as $$
+declare v_id uuid;
+begin
+  if not app.check_access('site_password', p_site_password) then
+    raise exception 'Das Seitenpasswort ist nicht korrekt. Bitte gib es erneut ein.' using hint = 'site';
+  end if;
+  select id into v_id from app.teachers where email = lower(btrim(coalesce(p_email, '')));
+  if v_id is not null then
+    insert into app.teacher_reset_requests (teacher_id) values (v_id)
+    on conflict (teacher_id) do update
+      set created_at = now(), code_hash = null, code_issued_at = null, code_expires_at = null;
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- Anmeldung mit Einmal-Code der Administration (2 Stunden gültig, einmalig)
+create or replace function public.teacher_login_with_code(p_email text, p_code text)
+returns jsonb language plpgsql security definer
+set search_path = app, extensions, public, pg_temp as $$
+declare t app.teachers; r app.teacher_reset_requests;
+begin
+  select * into t from app.teachers where email = lower(btrim(coalesce(p_email, '')));
+  if not found then
+    perform app.hash_secret('timing');
+    return jsonb_build_object('error', 'E-Mail-Adresse oder Code ist falsch.');
+  end if;
+  if t.locked_until is not null and t.locked_until > now() then
+    return jsonb_build_object('error', 'Zu viele Fehlversuche. Bitte versuche es in einigen Minuten erneut.');
+  end if;
+  select * into r from app.teacher_reset_requests where teacher_id = t.id;
+  if not found or r.code_hash is null
+     or not app.secret_matches(app.norm_code(p_code), r.code_hash) then
+    perform app.register_failed_login('teachers', t.id);
+    return jsonb_build_object('error', 'E-Mail-Adresse oder Code ist falsch.');
+  end if;
+  if r.code_expires_at < now() then
+    return jsonb_build_object('error', 'Dieser Code ist abgelaufen (gültig 2 Stunden). Bitte fordere einen neuen Code an.');
+  end if;
+  delete from app.teacher_reset_requests where teacher_id = t.id;
+  update app.teachers set must_change_password = true, failed_logins = 0, locked_until = null where id = t.id;
+  return jsonb_build_object('token', app.new_session('teacher', t.id, true), 'must_change_password', true);
+end $$;
+
+create or replace function public.teacher_set_new_password(p_token text, p_new_password text)
+returns jsonb language plpgsql security definer
+set search_path = app, extensions, public, pg_temp as $$
+declare v_t uuid := app.auth(p_token, 'teacher', true); v_must boolean;
+begin
+  select must_change_password into v_must from app.teachers where id = v_t;
+  if not coalesce(v_must, false) then
+    raise exception 'Bitte nutze "Passwort ändern" in deinem Profil.';
+  end if;
+  perform app.check_password(p_new_password);
+  update app.teachers set password_hash = app.hash_secret(p_new_password), must_change_password = false where id = v_t;
+  delete from app.sessions where user_id = v_t;
+  return jsonb_build_object('token', app.new_session('teacher', v_t));
+end $$;
+
+-- ---------------------------------------------------------------------
+--  Öffentliche API – Administration (nur Lehrkräfte mit Admin-Rechten)
+-- ---------------------------------------------------------------------
+
+create or replace function public.admin_get_teachers(p_token text)
+returns jsonb language plpgsql security definer
+set search_path = app, extensions, public, pg_temp as $$
+declare v_t uuid := app.auth(p_token, 'teacher');
+begin
+  perform app.require_admin(v_t);
+  return jsonb_build_object('teachers', coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'id', t.id, 'first_name', t.first_name, 'last_name', t.last_name, 'email', t.email,
+             'contact_name', t.contact_name, 'is_admin', t.is_admin, 'created_at', t.created_at,
+             'class_count', (select count(*) from app.classes c where c.teacher_id = t.id),
+             'student_count', (select count(*) from app.students s join app.classes c on c.id = s.class_id where c.teacher_id = t.id),
+             'requested_at', r.created_at, 'code_issued_at', r.code_issued_at, 'code_expires_at', r.code_expires_at,
+             'is_me', t.id = v_t)
+           order by (r.teacher_id is null), lower(t.last_name), lower(t.first_name))
+      from app.teachers t left join app.teacher_reset_requests r on r.teacher_id = t.id), '[]'::jsonb));
+end $$;
+
+create or replace function public.admin_issue_teacher_code(p_token text, p_teacher_id uuid)
+returns jsonb language plpgsql security definer
+set search_path = app, extensions, public, pg_temp as $$
+declare v_t uuid := app.auth(p_token, 'teacher'); v_code text; v_exp timestamptz;
+begin
+  perform app.require_admin(v_t);
+  if not exists (select 1 from app.teachers where id = p_teacher_id) then
+    raise exception 'Diese Lehrkraft wurde nicht gefunden.';
+  end if;
+  v_code := app.random_code(8);
+  v_exp  := now() + interval '2 hours';
+  insert into app.teacher_reset_requests (teacher_id, code_hash, code_issued_at, code_expires_at)
+  values (p_teacher_id, app.hash_secret(v_code), now(), v_exp)
+  on conflict (teacher_id) do update
+    set code_hash = excluded.code_hash, code_issued_at = excluded.code_issued_at,
+        code_expires_at = excluded.code_expires_at;
+  return jsonb_build_object('code', substr(v_code, 1, 4) || '-' || substr(v_code, 5, 4), 'expires_at', v_exp);
+end $$;
+
+create or replace function public.admin_dismiss_teacher_reset(p_token text, p_teacher_id uuid)
+returns jsonb language plpgsql security definer
+set search_path = app, extensions, public, pg_temp as $$
+declare v_t uuid := app.auth(p_token, 'teacher');
+begin
+  perform app.require_admin(v_t);
+  delete from app.teacher_reset_requests where teacher_id = p_teacher_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ---------------------------------------------------------------------
 --  Rechte: interne Funktionen sperren, API-Funktionen freigeben
 -- ---------------------------------------------------------------------
 
@@ -1097,7 +1254,9 @@ declare
     'teacher_get_appointments', 'teacher_issue_reset_code', 'teacher_dismiss_reset',
     'student_register', 'student_login', 'student_request_reset', 'student_login_with_code',
     'student_set_new_password', 'student_change_password', 'student_get_state',
-    'student_join_class', 'student_save_profile', 'teacher_set_class_cover'];
+    'student_join_class', 'student_save_profile', 'teacher_set_class_cover',
+    'teacher_request_reset', 'teacher_login_with_code', 'teacher_set_new_password',
+    'admin_get_teachers', 'admin_issue_teacher_code', 'admin_dismiss_teacher_reset'];
   r text;
 begin
   -- Zugriff auf das Schema public ausdrücklich erlauben (unabhängig von Supabase-Standardeinstellungen)

@@ -23,7 +23,10 @@ const classUi = { classId: null, panel: null, kuerzel: null, sort: store.get('pk
 // Assistent "Neue Klasse"
 const wizard = { open: false, grade: null, created: null };
 
+let isAdmin = false;
+
 function headerFor(teacher, { cover, band: bandStyle = 'ink' } = {}) {
+  isAdmin = Boolean(teacher && teacher.is_admin);
   setHeader({
     area: 'Lehrkräfte-Ansicht',
     user: teacher ? teacher.contact_name : '',
@@ -46,6 +49,7 @@ function subnav(active) {
     ${item('classes', '#/lehrkraft', 'Meine Klassen', 'heft')}
     ${item('calendar', '#/lehrkraft/kalender', 'Kalender', 'calendar')}
     ${item('profile', '#/lehrkraft/profil', 'Profil & Notfallkontakt', 'user')}
+    ${isAdmin ? item('admin', '#/lehrkraft/admin', 'Lehrkräfte', 'users') : ''}
   </nav>`;
 }
 
@@ -60,8 +64,23 @@ export async function teacherRoute(main, path, query) {
   if (!token()) {
     setHeader({ area: 'Lehrkräfte-Ansicht', band: 'ink' });
     if (path === '/lehrkraft/registrieren') return renderRegister(main);
+    if (path === '/lehrkraft/passwort-vergessen') return renderForgot(main);
+    if (path === '/lehrkraft/code-login') return renderCodeLogin(main);
     return renderLogin(main);
   }
+  try {
+    return await teacherPages(main, path, query);
+  } catch (e) {
+    // Anmeldung mit Einmal-Code: zuerst ein neues Passwort festlegen
+    if (e && e.hint === 'must_change') {
+      setHeader({ area: 'Lehrkräfte-Ansicht', band: 'ink' });
+      return renderSetNewPassword(main);
+    }
+    throw e;
+  }
+}
+
+async function teacherPages(main, path, query) {
   const parts = path.split('/').filter(Boolean);
   if (parts[1] === 'klasse' && parts[2] && parts[3] === 'schueler' && parts[4]) return renderStudent(main, parts[2], parts[4]);
   if (parts[1] === 'klasse' && parts[2]) return renderClass(main, parts[2], query);
@@ -73,6 +92,7 @@ export async function teacherRoute(main, path, query) {
     return renderCalendar(main, query, { token: token(), subnav: subnav('calendar') });
   }
   if (parts[1] === 'profil') return renderProfile(main);
+  if (parts[1] === 'admin') return renderAdmin(main);
   return renderDashboard(main);
 }
 
@@ -88,7 +108,10 @@ function renderLogin(main) {
         <input type="password" name="password" autocomplete="current-password" required></label>
       <p class="form-error" hidden></p>
       <button type="submit" class="btn btn--primary btn--block">Anmelden</button>
-      <p class="hint">Passwort vergessen? Bitte wende dich an die Person, die das Portal verwaltet.</p>
+      <div class="auth-links">
+        <a href="#/lehrkraft/passwort-vergessen">Passwort vergessen?</a>
+        <a href="#/lehrkraft/code-login">Ich habe einen Einmal-Code</a>
+      </div>
     </form>
     <div class="sheet sheet--quiet">
       <h2 class="sheet__title">Noch kein Benutzerkonto?</h2>
@@ -148,6 +171,170 @@ function renderRegister(main) {
       go('#/lehrkraft');
     });
   });
+}
+
+function renderForgot(main) {
+  render(main, authPage('Passwort vergessen', 'Die Administration des Portals erzeugt dir einen Einmal-Code für ein neues Passwort.', html`
+    <div class="sheet" id="tforgot-card">
+      <p>Mit dem <strong>Einmal-Code</strong> meldest du dich einmalig an (bis zu zwei Stunden nach dem Erzeugen) und legst dabei ein neues Passwort fest.</p>
+      <form id="tforgot-form" class="form" novalidate>
+        <label class="field"><span>Dienstliche E-Mail-Adresse</span>
+          <input type="email" name="email" autocomplete="username" required></label>
+        <p class="form-error" hidden></p>
+        <button type="submit" class="btn btn--primary btn--block">Anfrage an die Administration senden</button>
+      </form>
+      <div class="auth-links"><a href="#/lehrkraft">Zurück zur Anmeldung</a><a href="#/lehrkraft/code-login">Ich habe schon einen Einmal-Code</a></div>
+    </div>`));
+  const form = $('#tforgot-form');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitting(form, async () => {
+      const v = formValues(form);
+      if (!v.email.trim()) throw new Error('Bitte gib deine dienstliche E-Mail-Adresse an.');
+      await rpc('teacher_request_reset', { p_site_password: store.get(KEYS.site), p_email: v.email });
+      render($('#tforgot-card'), html`
+        <h2 class="sheet__title">Anfrage gesendet</h2>
+        <div class="note note--ok">${icon('check')}<p>Falls ein Lehrkräfte-Konto mit dieser E-Mail-Adresse existiert, sieht die Administration jetzt deine Anfrage.</p></div>
+        <p>Sobald du den Einmal-Code bekommen hast, meldest du dich damit an. Der Code ist nach dem Erzeugen
+          <strong>zwei Stunden</strong> gültig und funktioniert nur <strong>einmal</strong>.</p>
+        <a class="btn btn--primary btn--block" href="#/lehrkraft/code-login">Mit Einmal-Code anmelden ${icon('arrowRight')}</a>`);
+    });
+  });
+}
+
+function renderCodeLogin(main) {
+  render(main, authPage('Mit Einmal-Code anmelden', 'Den Code hat dir die Administration gegeben. Danach legst du sofort ein neues Passwort fest.', html`
+    <form id="tcode-form" class="sheet form" novalidate>
+      <label class="field"><span>Dienstliche E-Mail-Adresse</span>
+        <input type="email" name="email" autocomplete="username" required></label>
+      <label class="field"><span>Einmal-Code</span>
+        <input name="code" autocomplete="one-time-code" class="input-code input-code--large" required maxlength="12" placeholder="XXXX-XXXX"></label>
+      <p class="form-error" hidden></p>
+      <button type="submit" class="btn btn--primary btn--block">Anmelden</button>
+      <div class="auth-links"><a href="#/lehrkraft">Zurück zur Anmeldung</a></div>
+    </form>`));
+  const form = $('#tcode-form');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitting(form, async () => {
+      const v = formValues(form);
+      const res = await rpc('teacher_login_with_code', { p_email: v.email, p_code: v.code });
+      store.set(KEYS.teacher, res.token);
+      go('#/lehrkraft');
+    });
+  });
+}
+
+function renderSetNewPassword(main) {
+  render(main, authPage('Neues Passwort festlegen', 'Du hast dich mit einem Einmal-Code angemeldet. Bitte lege jetzt ein neues Passwort fest.', html`
+    <form id="tnewpw-form" class="sheet form" novalidate>
+      <label class="field"><span>Neues Passwort <small>(mindestens 8 Zeichen)</small></span>
+        <input type="password" name="password" autocomplete="new-password" required minlength="8" maxlength="72"></label>
+      <label class="field"><span>Neues Passwort bestätigen</span>
+        <input type="password" name="password2" autocomplete="new-password" required></label>
+      <p class="form-error" hidden></p>
+      <button type="submit" class="btn btn--primary btn--block">Passwort speichern</button>
+    </form>`));
+  const form = $('#tnewpw-form');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = formValues(form);
+    if (v.password !== v.password2) {
+      const box = form.querySelector('.form-error');
+      box.textContent = 'Die beiden Passwörter stimmen nicht überein.';
+      box.hidden = false;
+      return;
+    }
+    submitting(form, async () => {
+      const res = await rpc('teacher_set_new_password', T({ p_new_password: v.password }));
+      store.set(KEYS.teacher, res.token);
+      toast('Dein neues Passwort ist gespeichert.');
+      go('#/lehrkraft');
+    });
+  });
+}
+
+// ---------------------------------------------------------------------
+//  Administration: Lehrkräfte und ihre Passwort-Anfragen
+// ---------------------------------------------------------------------
+const issuedTeacherCodes = new Map();
+
+async function renderAdmin(main) {
+  const tok = navToken();
+  const [state, data] = await Promise.all([rpc('teacher_get_state', T()), rpc('admin_get_teachers', T())]);
+  if (isStale(tok)) return;
+  headerFor(state.teacher);
+  const refresh = () => (isStale(tok) ? Promise.resolve() : renderAdmin(main));
+  const requests = data.teachers.filter((t) => t.requested_at);
+  const codeRow = (t) => {
+    const c = issuedTeacherCodes.get(t.id);
+    if (!c) return '';
+    return html`<div class="code-issued" role="status">
+      ${icon('key')}
+      <span>Einmal-Code für ${t.first_name} ${t.last_name}</span> <strong class="code-display">${c.code}</strong>
+      <span class="small">gültig bis ${fmt.time(c.expires_at)} Uhr, nur einmal verwendbar – bitte persönlich weitergeben.</span>
+      <button type="button" class="btn btn--small btn--ghost" data-copy="${c.code}">${icon('copy', { size: 15 })} Kopieren</button>
+    </div>`;
+  };
+  render(main, html`
+    ${band({ tabs: subnav('admin'), title: 'Lehrkräfte', sub: `${data.teachers.length} registrierte Lehrkräfte · Administration des Portals` })}
+    <div class="wrap page-body stack-lg">
+      ${requests.length ? html`
+      <section class="sheet card--alert">
+        <h2 class="sheet__title">${icon('key', { size: 20 })} Passwort-Anfragen von Lehrkräften <span class="tag tag--warn">${requests.length} offen</span></h2>
+        <p class="muted small">Erzeuge einen Einmal-Code und gib ihn der Lehrkraft persönlich (oder über einen sicheren Weg) weiter.
+          Der Code ist zwei Stunden gültig und nur einmal verwendbar; bei der Anmeldung damit legt die Lehrkraft ein neues Passwort fest.</p>
+        <ul class="request-list">
+          ${requests.map((t) => html`
+            <li>
+              <div class="request-main">
+                <div><strong>${t.last_name}, ${t.first_name}</strong> <span class="muted small">${t.email}</span></div>
+                <div class="small muted">angefragt am ${fmt.dateTime(t.requested_at)}
+                  ${t.code_issued_at ? html` · Code erzeugt um ${fmt.time(t.code_issued_at)} Uhr${new Date(t.code_expires_at) < new Date() ? ' (abgelaufen)' : ''}` : ''}</div>
+              </div>
+              <div class="request-actions">
+                <button type="button" class="btn btn--primary btn--small" data-tissue="${t.id}">${t.code_issued_at ? 'Neuen Code erzeugen' : 'Einmal-Code erzeugen'}</button>
+                <button type="button" class="btn btn--ghost btn--small" data-tdismiss="${t.id}">Verwerfen</button>
+              </div>
+              ${codeRow(t)}
+            </li>`)}
+        </ul>
+      </section>` : ''}
+
+      <section class="sheet sheet--flush">
+        <div class="sheet__head sheet__head--pad"><h2 class="sheet__title">Alle Lehrkräfte</h2></div>
+        <div class="table-wrap">
+          <table class="student-table teacher-table">
+            <thead><tr><th>Name</th><th>E-Mail</th><th class="num">Klassen</th><th class="num">Schüler/-innen</th><th>Registriert</th><th><span class="sr-only">Aktion</span></th></tr></thead>
+            <tbody>
+              ${data.teachers.map((t) => html`<tr>
+                <td class="col-name">${t.last_name}, ${t.first_name}${t.is_admin ? html` <span class="tag tag--cover">Admin</span>` : ''}${t.requested_at ? html` <span class="tag tag--warn">Anfrage</span>` : ''}</td>
+                <td>${t.email}</td>
+                <td class="num">${t.class_count}</td>
+                <td class="num">${t.student_count}</td>
+                <td class="nowrap">${fmt.date(t.created_at)}</td>
+                <td>${t.is_me ? '' : html`<button type="button" class="btn btn--small btn--ghost" data-tissue="${t.id}">${icon('key', { size: 15 })} Einmal-Code</button>`}</td>
+              </tr>
+              ${issuedTeacherCodes.has(t.id) && !t.requested_at ? html`<tr class="row-code"><td colspan="6">${codeRow(t)}</td></tr>` : ''}`)}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <p class="hint">Admin-Rechte vergibst du im Supabase SQL Editor mit <code>select app.set_admin('dienstliche@adresse.de');</code>.
+        Dein eigenes Passwort setzt du dort bei Bedarf mit <code>app.admin_reset_teacher_password</code> zurück.</p>
+    </div>`);
+  $$('[data-tissue]', main).forEach((b) => b.addEventListener('click', () => busy(b, async () => {
+    const res = await rpc('admin_issue_teacher_code', T({ p_teacher_id: b.dataset.tissue }));
+    issuedTeacherCodes.set(b.dataset.tissue, res);
+    await refresh();
+  })));
+  $$('[data-tdismiss]', main).forEach((b) => b.addEventListener('click', () => busy(b, async () => {
+    if (!confirm('Anfrage verwerfen? Ein bereits erzeugter Code wird damit ungültig.')) return;
+    await rpc('admin_dismiss_teacher_reset', T({ p_teacher_id: b.dataset.tdismiss }));
+    issuedTeacherCodes.delete(b.dataset.tdismiss);
+    await refresh();
+  })));
+  $$('[data-copy]', main).forEach((b) => b.addEventListener('click', () => copyText(b.dataset.copy)));
 }
 
 // ---------------------------------------------------------------------
@@ -289,6 +476,10 @@ async function renderDashboard(main) {
       aside: html`<button type="button" class="btn btn--band-solid" id="wizard-open">${icon('plus', { size: 18 })} Klasse hinzufügen</button>`,
     })}
     <div class="wrap page-body">
+      ${state.teacher_requests ? html`<section class="sheet card--alert">
+        <h2 class="sheet__title">${icon('key', { size: 20 })} Passwort-Anfragen von Lehrkräften <span class="tag tag--warn">${state.teacher_requests} offen</span></h2>
+        <p><a href="#/lehrkraft/admin">Zur Lehrkräfte-Verwaltung ${icon('arrowRight', { size: 15 })}</a></p>
+      </section>` : ''}
       ${resetRequestsCard(state.reset_requests)}
       <section class="class-grid" aria-label="Klassen">
         ${state.classes.map((c) => html`

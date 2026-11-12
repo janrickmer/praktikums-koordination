@@ -47,6 +47,8 @@ Klassen, Praktikumsbesuche, Videocalls und Termine.
   PDF mit Schülerdaten + ab Seite 2 der Gesprächsleitfaden (`assets/gespraechsleitfaden.pdf`)
 * **Kalender** mit Wochenansicht, Navigation zwischen Wochen und **ICS-Export**
 * Profil mit Notfallkontakt (Name und E-Mail Pflicht, Telefon freiwillig)
+* Administration (Reiter „Lehrkräfte“, nur mit Admin-Rechten): Übersicht aller Lehrkräfte und
+  Einmal-Codes für Lehrkräfte, die ihr Passwort vergessen haben
 * Klasse löschen (inkl. aller Schülerkonten der Klasse, z. B. am Schuljahresende)
 
 ---
@@ -99,7 +101,9 @@ Klassen, Praktikumsbesuche, Videocalls und Termine.
 | Aufgabe | So geht's |
 | --- | --- |
 | Seitenpasswort / Lehrkräfte-Code ändern | SQL Editor: `select app.set_access_codes('NEU', 'NEU');` |
-| Lehrkraft hat Passwort vergessen | SQL Editor: `select app.admin_reset_teacher_password('mail@schule.de', 'NeuesPasswort123');` |
+| Admin-Rechte vergeben | SQL Editor: `select app.set_admin('dienstliche@adresse.de');` (entziehen: `…, false`) |
+| Lehrkraft hat Passwort vergessen | „Passwort vergessen?“ auf der Lehrkräfte-Anmeldung → Admin erzeugt im Reiter „Lehrkräfte“ einen Einmal-Code |
+| Admin selbst hat Passwort vergessen | SQL Editor: `select app.admin_reset_teacher_password('mail@schule.de', 'NeuesPasswort123');` |
 | Schüler hat Passwort vergessen | „Passwort vergessen“ → Lehrkraft erzeugt Einmal-Code |
 | Daten am Schuljahresende löschen | In der Lehrkräfte-Ansicht die Klasse öffnen → „Klasse löschen“ |
 | Update der Datenbankfunktionen | `supabase/schema.sql` erneut komplett im SQL Editor ausführen (Daten bleiben erhalten) – nötig z. B. seit den Umschlagfarben der Klassen |
@@ -165,7 +169,7 @@ psql -d praktikum -f supabase/schema.sql
 psql -d praktikum -c "select app.set_access_codes('test-seite', 'Test-Code');"
 cd dev && npm install
 DATABASE_URL=postgres://localhost/praktikum node server.mjs   # http://localhost:8080
-node e2e.mjs        # in einem zweiten Terminal (Werte ggf. über SITE_PASSWORD / TEACHER_CODE setzen)
+DATABASE_URL=postgres://localhost/praktikum node e2e.mjs   # zweites Terminal; Werte ggf. über SITE_PASSWORD / TEACHER_CODE
 ```
 
 Der Entwicklungsserver bildet die Supabase-Schnittstelle (`/rest/v1/rpc/…`) nach und ruft die

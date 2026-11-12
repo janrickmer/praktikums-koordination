@@ -6,12 +6,15 @@ import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
+import pg from 'pg';
 
 // Playwright wird per require geladen, damit auch eine global installierte Version gefunden wird
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8080';
 const SITE_PW = process.env.SITE_PASSWORD || 'test-seite';
+// Für den Admin-Test (Admin-Rechte wie im SQL Editor vergeben); ohne Angabe wird er übersprungen
+const DB_URL = process.env.DATABASE_URL || '';
 const TEACHER_CODE = process.env.TEACHER_CODE || 'Test-Code';
 const SHOTS = process.env.SHOTS || path.resolve('screenshots');
 await mkdir(SHOTS, { recursive: true });
@@ -37,7 +40,9 @@ const rpc = (page, fn, params) => page.evaluate(async ([f, p]) => {
 }, [fn, params]);
 
 async function gotoHash(page, hash, waitFor) {
-  await page.evaluate((h) => { location.hash = h; }, hash);
+  const same = await page.evaluate((h) => location.hash === h, hash);
+  if (same) await page.reload();
+  else await page.evaluate((h) => { location.hash = h; }, hash);
   if (!waitFor) return;
   try {
     await page.waitForSelector(waitFor);
@@ -436,6 +441,60 @@ assert.equal(await teacher.locator('.request-list').count(), 0);
 log('Anfrage → Code (einmalig, 2 h) → Pflicht zum neuen Passwort; alter Code/altes Passwort ungültig');
 
 // ---------------------------------------------------------------------
+if (DB_URL) {
+  console.log('Lehrkräfte: Passwort vergessen über die Administration');
+  const db = new pg.Client({ connectionString: DB_URL });
+  await db.connect();
+  await db.query('select app.set_admin($1)', [tEmail]);
+  await db.end();
+  const t2Email = `kollegin-${run}@schule.example`;
+  const reg2 = await rpc(student, 'teacher_register', { p_site_password: SITE_PW, p_teacher_code: TEACHER_CODE, p_first_name: 'Karla', p_last_name: 'Kollegin', p_email: t2Email, p_password: 'altesPasswort1' });
+  assert.ok(reg2.token);
+  const denied = await rpc(student, 'admin_get_teachers', { p_token: reg2.token });
+  assert.match(denied.message || '', /Administration/);
+  log('Admin-Rechte nur per SQL; andere Lehrkräfte erreichen die Verwaltung nicht');
+
+  const kol = await newPage({ width: 390, height: 844 });
+  await passGate(kol);
+  await gotoHash(kol, '#/lehrkraft', '#tlogin-form');
+  await kol.click('a:has-text("Passwort vergessen?")');
+  await kol.fill('#tforgot-form input[name=email]', t2Email);
+  await kol.click('#tforgot-form button[type=submit]');
+  await kol.waitForSelector('text=Anfrage gesendet');
+
+  await gotoClasses(teacher);
+  await teacher.waitForSelector('a:has-text("Zur Lehrkräfte-Verwaltung")');
+  await teacher.click('.subnav a:has-text("Lehrkräfte")');
+  await teacher.waitForSelector('.request-list');
+  assert.match(await teacher.textContent('.request-list'), /Kollegin, Karla/);
+  await teacher.click('.request-list [data-tissue]');
+  await teacher.waitForSelector('.code-display');
+  const tCode = (await teacher.textContent('.code-display')).trim();
+  assert.match(tCode, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  await shot(teacher, '14-admin-lehrkraefte');
+  log('Anfrage einer Lehrkraft erscheint bei der Administration; Einmal-Code erzeugt');
+
+  await kol.click('a:has-text("Mit Einmal-Code anmelden")');
+  await kol.fill('#tcode-form input[name=email]', t2Email);
+  await kol.fill('#tcode-form input[name=code]', tCode.toLowerCase());
+  await kol.click('#tcode-form button[type=submit]');
+  await kol.waitForSelector('#tnewpw-form');
+  const blocked = await rpc(kol, 'teacher_get_class', { p_token: await kol.evaluate(() => localStorage.getItem('pk_teacher_token')), p_class_id: '00000000-0000-0000-0000-000000000000' });
+  assert.equal(blocked.hint, 'must_change');
+  await kol.fill('#tnewpw-form input[name=password]', 'neuesPasswort7');
+  await kol.fill('#tnewpw-form input[name=password2]', 'neuesPasswort7');
+  await kol.click('#tnewpw-form button[type=submit]');
+  await kol.waitForSelector('h1:has-text("Meine Klassen")');
+  assert.equal(await kol.locator('.subnav a:has-text("Lehrkräfte")').count(), 0);
+  const oldT = await rpc(kol, 'teacher_login', { p_email: t2Email, p_password: 'altesPasswort1' });
+  assert.match(oldT.error || '', /falsch/);
+  const newT = await rpc(kol, 'teacher_login', { p_email: t2Email, p_password: 'neuesPasswort7' });
+  assert.ok(newT.token);
+  const reuseT = await rpc(kol, 'teacher_login_with_code', { p_email: t2Email, p_code: tCode });
+  assert.match(reuseT.error || '', /falsch/);
+  log('Lehrkraft: Einmal-Code → Pflicht zum neuen Passwort; altes Passwort und Code danach ungültig');
+}
+
 console.log('Sicherheit & Aufräumen');
 const foreign = await rpc(student, 'teacher_get_class', { p_token: tokLea, p_class_id: '00000000-0000-0000-0000-000000000000' });
 assert.equal(foreign.hint, 'session');
@@ -449,6 +508,7 @@ const steal = await rpc(student, 'teacher_get_class', { p_token: t2.token, p_cla
 assert.match(steal.message, /nicht gefunden/);
 log(`Schüler-Token gilt nicht als Lehrkraft; fremde Lehrkraft sieht keine Klassen anderer (${cls9})`);
 
+await gotoClasses(teacher);
 await teacher.click('a.class-card:has-text("E-Phase")');
 await teacher.click('.danger-zone summary');
 await teacher.fill('#delete-class-form input[name=confirm]', 'falsch');

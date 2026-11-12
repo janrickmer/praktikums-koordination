@@ -736,3 +736,17 @@ body[data-page="cover"] .site-footer { display: none; }
   .band { background: none; color: #000; }
   .sheet { box-shadow: none; }
 }
+
+/* ---------- Administration: Lehrkräfte-Liste ---------- */
+.teacher-table tbody tr { cursor: default; }
+.teacher-table .col-name .tag { margin-left: 0.3rem; }
+.teacher-table .row-code td { padding-top: 0; }
+@media (max-width: 640px) {
+  .teacher-table tr { display: block; padding: 0.8rem 1rem; }
+  .teacher-table td { display: block; padding: 0.1rem 0 !important; text-align: left !important; }
+  .teacher-table td:nth-child(2) { color: var(--ink-3); font-size: 0.875rem; overflow-wrap: anywhere; }
+  .teacher-table td:nth-child(3)::before { content: "Klassen: "; color: var(--ink-3); }
+  .teacher-table td:nth-child(4)::before { content: "Schüler/-innen: "; color: var(--ink-3); }
+  .teacher-table td:nth-child(5)::before { content: "Registriert: "; color: var(--ink-3); }
+  .teacher-table td:last-child:not(:empty) { padding-top: 0.4rem !important; }
+}
