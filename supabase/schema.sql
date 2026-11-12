@@ -1279,5 +1279,17 @@ begin
   end loop;
 end $$;
 
+-- ---------------------------------------------------------------------
+--  Administration: Das Lehrkräfte-Konto der Portal-Betreuung erhält
+--  Admin-Rechte. Die dienstliche E-Mail-Adresse steht hier nur als
+--  SHA-256-Prüfsumme, weil das Repository öffentlich ist. Existiert das
+--  Konto noch nicht, passiert nichts; nach der Registrierung dieses
+--  Skript einfach erneut ausführen. Weitere Admins:
+--      select app.set_admin('dienstliche@adresse.de');
+-- ---------------------------------------------------------------------
+update app.teachers set is_admin = true
+ where not is_admin
+   and encode(extensions.digest(email, 'sha256'), 'hex') = 'a330a5493f298421ef9f60c6ca2c58f71debfd00139bbf045a55b198945cd075';
+
 -- Schnittstelle (PostgREST) über neue Funktionen informieren
 notify pgrst, 'reload schema';
